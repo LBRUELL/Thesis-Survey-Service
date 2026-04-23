@@ -1,0 +1,468 @@
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+const { v4: uuidv4 } = require("uuid");
+const fs = require("fs").promises;
+const fsSync = require("fs");
+const path = require("path");
+const fetch = require("node-fetch");
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+
+// ─── Middleware ────────────────────────────────────────────────────────────────
+app.use(cors({ origin: "*" }));
+app.use(express.json({ limit: "50mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/videos", express.static(path.join(__dirname, "videos")));
+
+// Serve built React client in production
+const CLIENT_BUILD = path.join(__dirname, "../client/dist");
+if (fsSync.existsSync(CLIENT_BUILD)) {
+  app.use(express.static(CLIENT_BUILD));
+}
+
+// ─── File Upload Config ────────────────────────────────────────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads")),
+  filename: (req, file, cb) =>
+    cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only images are allowed"), false);
+  },
+});
+
+// ─── Storage Helpers ───────────────────────────────────────────────────────────
+const DATA_DIR = path.join(__dirname, "data");
+const SURVEYS_FILE = path.join(DATA_DIR, "surveys.json");
+const RESPONSES_DIR = path.join(DATA_DIR, "responses");
+
+async function initStorage() {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(RESPONSES_DIR, { recursive: true });
+  await fs.mkdir(path.join(__dirname, "uploads"), { recursive: true });
+  await fs.mkdir(path.join(__dirname, "videos"), { recursive: true });
+  try {
+    await fs.access(SURVEYS_FILE);
+  } catch {
+    await fs.writeFile(SURVEYS_FILE, JSON.stringify({}, null, 2));
+  }
+}
+
+async function getSurveys() {
+  const data = await fs.readFile(SURVEYS_FILE, "utf8");
+  return JSON.parse(data);
+}
+
+async function saveSurveys(surveys) {
+  await fs.writeFile(SURVEYS_FILE, JSON.stringify(surveys, null, 2));
+}
+
+async function getResponses(surveyId) {
+  const file = path.join(RESPONSES_DIR, `${surveyId}.json`);
+  try {
+    const data = await fs.readFile(file, "utf8");
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+async function saveResponse(surveyId, response) {
+  const file = path.join(RESPONSES_DIR, `${surveyId}.json`);
+  const responses = await getResponses(surveyId);
+  responses.push(response);
+  await fs.writeFile(file, JSON.stringify(responses, null, 2));
+}
+
+// ─── Survey Routes ─────────────────────────────────────────────────────────────
+
+// Create a new survey
+app.post("/api/surveys", async (req, res) => {
+  try {
+    const { title, description, pages } = req.body;
+    if (!title || !pages?.length) {
+      return res.status(400).json({ error: "Title and at least one page are required" });
+    }
+
+    const id = uuidv4();
+    const adminToken = uuidv4();
+    const survey = {
+      id,
+      adminToken,
+      title,
+      description: description || "",
+      pages,
+      createdAt: new Date().toISOString(),
+      responseCount: 0,
+    };
+
+    const surveys = await getSurveys();
+    surveys[id] = survey;
+    await saveSurveys(surveys);
+
+    res.json({
+      id,
+      adminToken,
+      shareLink: `/survey/${id}`,
+      adminLink: `/admin/${id}?token=${adminToken}`,
+    });
+  } catch (err) {
+    console.error("Create survey error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a survey (public — strips admin token)
+app.get("/api/surveys/:id", async (req, res) => {
+  try {
+    const surveys = await getSurveys();
+    const survey = surveys[req.params.id];
+    if (!survey) return res.status(404).json({ error: "Survey not found" });
+    const { adminToken, ...publicSurvey } = survey;
+    res.json(publicSurvey);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Submit a response
+app.post("/api/surveys/:id/responses", async (req, res) => {
+  try {
+    const surveys = await getSurveys();
+    if (!surveys[req.params.id])
+      return res.status(404).json({ error: "Survey not found" });
+
+    const responseId = uuidv4();
+    const response = {
+      id: responseId,
+      surveyId: req.params.id,
+      answers: req.body.answers,
+      submittedAt: new Date().toISOString(),
+    };
+
+    await saveResponse(req.params.id, response);
+
+    // Increment counter
+    surveys[req.params.id].responseCount =
+      (surveys[req.params.id].responseCount || 0) + 1;
+    await saveSurveys(surveys);
+
+    res.json({ success: true, responseId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get responses (admin only)
+app.get("/api/surveys/:id/responses", async (req, res) => {
+  try {
+    const { token } = req.query;
+    const surveys = await getSurveys();
+    const survey = surveys[req.params.id];
+    if (!survey) return res.status(404).json({ error: "Survey not found" });
+    if (survey.adminToken !== token)
+      return res.status(403).json({ error: "Invalid admin token" });
+
+    const responses = await getResponses(req.params.id);
+    res.json({ survey: { title: survey.title }, responses });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Gemini VEO Routes ─────────────────────────────────────────────────────────
+
+// Upload image and start video generation
+app.post("/api/generate-video", upload.single("image"), async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(503).json({
+        error: "GEMINI_API_KEY not configured",
+        message: "Set the GEMINI_API_KEY environment variable to enable video generation.",
+      });
+    }
+
+    const { prompt } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    // Read uploaded image as base64
+    const imageBuffer = await fs.readFile(req.file.path);
+    const base64Image = imageBuffer.toString("base64");
+    const mimeType = req.file.mimetype;
+
+    // Call Gemini VEO 2 API (long-running operation)
+    const veoRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [
+            {
+              prompt,
+              image: {
+                bytesBase64Encoded: base64Image,
+                mimeType,
+              },
+            },
+          ],
+          parameters: {
+            aspectRatio: "16:9",
+            sampleCount: 1,
+            durationSeconds: 5,
+          },
+        }),
+      }
+    );
+
+    if (!veoRes.ok) {
+      const errBody = await veoRes.json().catch(() => ({}));
+      console.error("VEO API error:", errBody);
+      return res.status(502).json({
+        error: "Gemini VEO API error",
+        details: errBody?.error?.message || "Unknown error from VEO API",
+      });
+    }
+
+    const operation = await veoRes.json();
+    // operation.name is like "operations/xxxxxxxx"
+    res.json({ operationName: operation.name, status: "processing" });
+  } catch (err) {
+    console.error("Generate video error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Poll video generation status
+app.get("/api/video-status", async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
+    }
+
+    const { operationName } = req.query;
+    if (!operationName)
+      return res.status(400).json({ error: "operationName is required" });
+
+    const pollRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
+    );
+
+    if (!pollRes.ok) {
+      const errBody = await pollRes.json().catch(() => ({}));
+      return res.status(502).json({ error: "Poll error", details: errBody });
+    }
+
+    const data = await pollRes.json();
+
+    if (!data.done) {
+      return res.json({ status: "processing" });
+    }
+
+    if (data.error) {
+      return res.json({ status: "error", error: data.error.message });
+    }
+
+    // Extract video URI from response
+    const samples =
+      data.response?.generateVideoResponse?.generatedSamples || [];
+    if (!samples.length) {
+      return res.json({ status: "error", error: "No video generated" });
+    }
+
+    const videoUri = samples[0]?.video?.uri;
+    if (!videoUri) {
+      return res.json({ status: "error", error: "No video URI in response" });
+    }
+
+    // Download the video and store it locally so we can serve it
+    const videoId = uuidv4();
+    const videoFilename = `${videoId}.mp4`;
+    const videoPath = path.join(__dirname, "videos", videoFilename);
+
+    const videoDownload = await fetch(videoUri);
+    const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
+    await fs.writeFile(videoPath, videoBuffer);
+
+    res.json({
+      status: "complete",
+      videoUrl: `/videos/${videoFilename}`,
+    });
+  } catch (err) {
+    console.error("Video status error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Gemini Image Generation ──────────────────────────────────────────────────
+
+app.post("/api/generate-image", upload.single("image"), async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(503).json({
+        error: "GEMINI_API_KEY not configured",
+        message: "Set the GEMINI_API_KEY environment variable to enable image generation.",
+      });
+    }
+
+    const { prompt } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    const imageBuffer = await fs.readFile(req.file.path);
+    const base64Image = imageBuffer.toString("base64");
+    const mimeType = req.file.mimetype;
+
+    // Clean up the upload immediately — we only needed it for base64
+    await fs.unlink(req.file.path).catch(() => {});
+
+    // gemini-2.0-flash-exp supports image output via responseModalities
+    const genRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: mimeType, data: base64Image } },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["image", "text"],
+          },
+        }),
+      }
+    );
+
+    if (!genRes.ok) {
+      const errBody = await genRes.json().catch(() => ({}));
+      console.error("Gemini image gen error:", errBody);
+      return res.status(502).json({
+        error: "Gemini image generation error",
+        details: errBody?.error?.message || "Unknown error",
+      });
+    }
+
+    const data = await genRes.json();
+
+    // Find the image part in the response
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
+
+    if (!imagePart) {
+      return res.status(502).json({ error: "No image returned by Gemini" });
+    }
+
+    // Save the generated image temporarily for serving (deleted after client fetches it)
+    const genImageId = uuidv4();
+    const ext = imagePart.inlineData.mimeType.split("/")[1] || "png";
+    const genFilename = `${genImageId}.${ext}`;
+    const genPath = path.join(__dirname, "videos", genFilename); // reuse the videos dir
+    await fs.writeFile(genPath, Buffer.from(imagePart.inlineData.data, "base64"));
+
+    res.json({
+      status: "complete",
+      imageUrl: `/videos/${genFilename}`,
+      mimeType: imagePart.inlineData.mimeType,
+    });
+  } catch (err) {
+    console.error("Generate image error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a generated image after the client has fetched it
+app.delete("/api/image-cleanup", async (req, res) => {
+  try {
+    const { imagePath } = req.body;
+    if (!imagePath || !imagePath.startsWith("/videos/")) {
+      return res.status(400).json({ error: "Invalid image path" });
+    }
+    const filename = path.basename(imagePath);
+    if (!/^[a-f0-9-]+\.(png|jpg|jpeg|webp)$/i.test(filename)) {
+      return res.status(400).json({ error: "Invalid filename" });
+    }
+    await fs.unlink(path.join(__dirname, "videos", filename)).catch(() => {});
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Video Cleanup ─────────────────────────────────────────────────────────────
+
+// Called by the client after it has loaded the video into a blob URL
+app.delete("/api/video-cleanup", async (req, res) => {
+  try {
+    const { videoPath } = req.body; // e.g. "/videos/uuid.mp4"
+    if (!videoPath || !videoPath.startsWith("/videos/")) {
+      return res.status(400).json({ error: "Invalid video path" });
+    }
+    const filename = path.basename(videoPath);
+    // Validate it looks like a UUID filename (no path traversal)
+    if (!/^[a-f0-9-]+\.mp4$/i.test(filename)) {
+      return res.status(400).json({ error: "Invalid filename" });
+    }
+    const fullPath = path.join(__dirname, "videos", filename);
+    await fs.unlink(fullPath).catch(() => {}); // silently ignore if already gone
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sweep videos older than 1 hour (safety net for any that slipped through)
+async function sweepOldVideos() {
+  try {
+    const videosDir = path.join(__dirname, "videos");
+    const files = await fs.readdir(videosDir);
+    const cutoff = Date.now() - 60 * 60 * 1000; // 1 hour
+    for (const file of files) {
+      const filePath = path.join(videosDir, file);
+      const stat = await fs.stat(filePath).catch(() => null);
+      if (stat && stat.mtimeMs < cutoff) {
+        await fs.unlink(filePath).catch(() => {});
+      }
+    }
+  } catch {}
+}
+
+// Run sweep every 15 minutes
+setInterval(sweepOldVideos, 15 * 60 * 1000);
+
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    veoEnabled: !!GEMINI_API_KEY,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ─── Catch-all for React SPA ───────────────────────────────────────────────────
+if (fsSync.existsSync(CLIENT_BUILD)) {
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(CLIENT_BUILD, "index.html"));
+  });
+}
+
+// ─── Start ─────────────────────────────────────────────────────────────────────
+initStorage().then(() => {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Survey API running on http://localhost:${PORT}`);
+    console.log(`   VEO video generation: ${GEMINI_API_KEY ? "✅ enabled" : "❌ disabled (set GEMINI_API_KEY)"}\n`);
+  });
+});
