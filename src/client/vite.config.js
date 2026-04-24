@@ -7,15 +7,15 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:3001",
+        target: "https://fortunate-vision-production-3ab3.up.railway.app",
         changeOrigin: true,
       },
       "/uploads": {
-        target: "http://localhost:3001",
+        target: "https://fortunate-vision-production-3ab3.up.railway.app",
         changeOrigin: true,
       },
       "/videos": {
-        target: "http://localhost:3001",
+        target: "https://fortunate-vision-production-3ab3.up.railway.app",
         changeOrigin: true,
       },
     },
