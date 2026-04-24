@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import styles from "./AdminView.module.css";
+import { apiUrl } from "../utils/api.js";
 
 export default function AdminView() {
   const { id } = useParams();
@@ -17,7 +18,7 @@ export default function AdminView() {
       setLoading(false);
       return;
     }
-    fetch(`/api/surveys/${id}/responses?token=${token}`)
+    fetch(apiUrl(`/api/surveys/${id}/responses?token=${token}`))
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);

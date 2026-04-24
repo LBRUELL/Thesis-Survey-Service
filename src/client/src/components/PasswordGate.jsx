@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import styles from "./PasswordGate.module.css";
+import { apiUrl } from "../utils/api.js";
 
 export default function PasswordGate({ onSuccess }) {
   const [password, setPassword] = useState("");
@@ -13,7 +14,7 @@ export default function PasswordGate({ onSuccess }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth/verify", {
+      const res = await fetch(apiUrl("/api/auth/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
