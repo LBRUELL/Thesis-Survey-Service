@@ -12,6 +12,14 @@ const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
+// ─── Feature Config ────────────────────────────────────────────────────────────
+// Set CREATE_PASSWORD in .env to restrict who can publish surveys
+const CREATE_PASSWORD = process.env.CREATE_PASSWORD || "research2025";
+
+// Per-device generation limits — 0 = unlimited
+const MAX_VIDEOS_PER_DEVICE = parseInt(process.env.MAX_VIDEOS_PER_DEVICE || "5", 10);
+const MAX_IMAGES_PER_DEVICE = parseInt(process.env.MAX_IMAGES_PER_DEVICE || "10", 10);
+
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "50mb" }));
@@ -81,6 +89,65 @@ async function saveResponse(surveyId, response) {
   responses.push(response);
   await fs.writeFile(file, JSON.stringify(responses, null, 2));
 }
+
+// ─── Device Usage Helpers ─────────────────────────────────────────────────────
+const USAGE_FILE = path.join(DATA_DIR, "device_usage.json");
+
+async function getUsage() {
+  try {
+    const data = await fs.readFile(USAGE_FILE, "utf8");
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+async function saveUsage(usage) {
+  await fs.writeFile(USAGE_FILE, JSON.stringify(usage, null, 2));
+}
+
+async function recordUsage(deviceId, type) {
+  const usage = await getUsage();
+  if (!usage[deviceId]) usage[deviceId] = { videos: 0, images: 0, firstSeen: new Date().toISOString() };
+  usage[deviceId][type] = (usage[deviceId][type] || 0) + 1;
+  usage[deviceId].lastSeen = new Date().toISOString();
+  await saveUsage(usage);
+}
+
+async function checkLimit(deviceId, type) {
+  if (!deviceId) return { allowed: true };
+  const limit = type === "videos" ? MAX_VIDEOS_PER_DEVICE : MAX_IMAGES_PER_DEVICE;
+  if (limit === 0) return { allowed: true };
+  const usage = await getUsage();
+  const count = usage[deviceId]?.[type] || 0;
+  return { allowed: count < limit, used: count, limit };
+}
+
+// ─── Auth Routes ───────────────────────────────────────────────────────────────
+
+// Verify the create-survey password
+app.post("/api/auth/verify", (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: "Password required" });
+  if (password === CREATE_PASSWORD) {
+    res.json({ ok: true });
+  } else {
+    res.status(403).json({ ok: false, error: "Incorrect password" });
+  }
+});
+
+// Get current device usage (so the client can show remaining quota)
+app.get("/api/usage", async (req, res) => {
+  const deviceId = req.headers["x-device-id"];
+  if (!deviceId) return res.json({ videos: 0, images: 0, limits: { videos: MAX_VIDEOS_PER_DEVICE, images: MAX_IMAGES_PER_DEVICE } });
+  const usage = await getUsage();
+  const d = usage[deviceId] || { videos: 0, images: 0 };
+  res.json({
+    videos: d.videos || 0,
+    images: d.images || 0,
+    limits: { videos: MAX_VIDEOS_PER_DEVICE, images: MAX_IMAGES_PER_DEVICE },
+  });
+});
 
 // ─── Survey Routes ─────────────────────────────────────────────────────────────
 
@@ -190,6 +257,17 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
       });
     }
 
+    const deviceId = req.headers["x-device-id"];
+    const limitCheck = await checkLimit(deviceId, "videos");
+    if (!limitCheck.allowed) {
+      return res.status(429).json({
+        error: "Generation limit reached",
+        message: `You have reached the maximum of ${limitCheck.limit} video generations allowed per device.`,
+        used: limitCheck.used,
+        limit: limitCheck.limit,
+      });
+    }
+
     const { prompt } = req.body;
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
@@ -234,7 +312,8 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     }
 
     const operation = await veoRes.json();
-    // operation.name is like "operations/xxxxxxxx"
+    // Record usage now — operation is queued
+    if (deviceId) await recordUsage(deviceId, "videos");
     res.json({ operationName: operation.name, status: "processing" });
   } catch (err) {
     console.error("Generate video error:", err);
@@ -314,6 +393,17 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
       });
     }
 
+    const deviceId = req.headers["x-device-id"];
+    const limitCheck = await checkLimit(deviceId, "images");
+    if (!limitCheck.allowed) {
+      return res.status(429).json({
+        error: "Generation limit reached",
+        message: `You have reached the maximum of ${limitCheck.limit} image generations allowed per device.`,
+        used: limitCheck.used,
+        limit: limitCheck.limit,
+      });
+    }
+
     const { prompt } = req.body;
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
@@ -373,6 +463,7 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     const genPath = path.join(__dirname, "videos", genFilename); // reuse the videos dir
     await fs.writeFile(genPath, Buffer.from(imagePart.inlineData.data, "base64"));
 
+    if (deviceId) await recordUsage(deviceId, "images");
     res.json({
       status: "complete",
       imageUrl: `/videos/${genFilename}`,

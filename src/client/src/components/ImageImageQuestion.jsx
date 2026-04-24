@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { getDeviceId } from "../utils/deviceId.js";
 import styles from "./ImageImageQuestion.module.css";
 
 export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
@@ -10,8 +11,17 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
 
+  const [quota, setQuota] = useState(null);
+
   const fileRef = useRef();
   const dragRef = useRef(null);
+
+  useEffect(() => {
+    fetch("/api/usage", { headers: { "x-device-id": getDeviceId() } })
+      .then((r) => r.json())
+      .then((d) => setQuota({ used: d.images, limit: d.limits.images }))
+      .catch(() => {});
+  }, []);
 
   const handleFile = useCallback(async (file) => {
     if (!file || !file.type.startsWith("image/")) {
@@ -41,6 +51,7 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
       setProgress({ label: "Sending to Gemini…", pct: 50 });
       const res = await fetch("/api/generate-image", {
         method: "POST",
+        headers: { "x-device-id": getDeviceId() },
         body: formData,
       });
       const data = await res.json();
@@ -63,6 +74,7 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
       setGeneratedUrl(blobUrl);
       setStage("done");
       setProgress(null);
+      setQuota((q) => q ? { ...q, used: q.used + 1 } : q);
       onChange({ imagePath: localUrl, generatedUrl: blobUrl });
     } catch (err) {
       setError(err.message);
@@ -118,6 +130,13 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
               onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
             />
           </div>
+          {quota && quota.limit > 0 && (
+            <p className={styles.quotaBadge}>
+              {quota.limit - quota.used > 0
+                ? `${quota.limit - quota.used} of ${quota.limit} image generations remaining on this device`
+                : "⚠ You have used all image generations allowed on this device"}
+            </p>
+          )}
           <p className={styles.privacyNote}>
             🔒 The generated image is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
           </p>

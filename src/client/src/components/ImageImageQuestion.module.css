@@ -201,3 +201,15 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+
+.quotaBadge {
+  font-size: 0.78125rem;
+  color: var(--accent);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  text-align: center;
+  font-weight: 500;
+}
+

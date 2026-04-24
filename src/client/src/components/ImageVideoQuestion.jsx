@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { getDeviceId } from "../utils/deviceId.js";
 import styles from "./ImageVideoQuestion.module.css";
 
 const POLL_INTERVAL_MS = 3000;
@@ -16,12 +17,22 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
   const [watchPct, setWatchPct] = useState(0);
   const [videoEnded, setVideoEnded] = useState(false);
 
+  const [quota, setQuota] = useState(null); // { used, limit }
+
   const fileRef = useRef();
   const videoRef = useRef();
   const pollCountRef = useRef(0);
   const pollTimerRef = useRef(null);
   const dragRef = useRef(null);
   const maxWatchedRef = useRef(0); // highest currentTime reached (handles scrubbing)
+
+  // Fetch current quota for this device on mount
+  useEffect(() => {
+    fetch("/api/usage", { headers: { "x-device-id": getDeviceId() } })
+      .then((r) => r.json())
+      .then((d) => setQuota({ used: d.videos, limit: d.limits.videos }))
+      .catch(() => {});
+  }, []);
 
   // ── Video playback tracking ──────────────────────────────────────────────
   const handleTimeUpdate = useCallback(() => {
@@ -77,6 +88,7 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
       setProgress({ label: "Sending to Gemini VEO…", pct: 40 });
       const res = await fetch("/api/generate-video", {
         method: "POST",
+        headers: { "x-device-id": getDeviceId() },
         body: formData,
       });
       const data = await res.json();
@@ -85,6 +97,7 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
       setStage("generating");
       setProgress({ label: "Generating video with Gemini VEO…", pct: 55 });
       onChange({ imagePath: localUrl, operationName: data.operationName });
+      setQuota((q) => q ? { ...q, used: q.used + 1 } : q);
 
       pollCountRef.current = 0;
       pollVideo(data.operationName, localUrl);
@@ -195,6 +208,13 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
               onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
             />
           </div>
+          {quota && quota.limit > 0 && (
+            <p className={styles.quotaBadge}>
+              {quota.limit - quota.used > 0
+                ? `${quota.limit - quota.used} of ${quota.limit} video generations remaining on this device`
+                : "⚠ You have used all video generations allowed on this device"}
+            </p>
+          )}
           <p className={styles.privacyNote}>
             🔒 The generated video is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
           </p>

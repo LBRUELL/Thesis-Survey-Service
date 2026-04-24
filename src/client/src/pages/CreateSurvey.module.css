@@ -232,7 +232,6 @@
 }
 
 .likertPreview {
-  display: flex;
   gap: 6px;
   margin-top: 12px;
   padding: 12px;

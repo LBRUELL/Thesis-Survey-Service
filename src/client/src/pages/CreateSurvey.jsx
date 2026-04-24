@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import styles from "./CreateSurvey.module.css";
+import PasswordGate from "../components/PasswordGate.jsx";
 
 const QUESTION_TYPES = [
   { value: "text", label: "Short Text" },
@@ -33,7 +34,7 @@ function newPage() {
   return { id: crypto.randomUUID(), title: "", questions: [newQuestion()] };
 }
 
-export default function CreateSurvey() {
+function CreateSurveyBuilder() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -384,4 +385,14 @@ function QuestionEditor({ question, index, onChange, onRemove, canRemove, allQue
       )}
     </div>
   );
+}
+
+export default function CreateSurvey() {
+  const [authed, setAuthed] = useState(
+    () => sessionStorage.getItem("forma_authed") === "1"
+  );
+  if (!authed) {
+    return <PasswordGate onSuccess={() => setAuthed(true)} />;
+  }
+  return <CreateSurveyBuilder />;
 }
