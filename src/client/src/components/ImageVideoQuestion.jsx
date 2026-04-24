@@ -153,26 +153,23 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
         const data = await res.json();
 
         if (data.status === "complete") {
-          // Fetch video as blob so the server can delete the file; video lives only in browser memory
-          setProgress({ label: "Loading your video…", pct: 95 });
-          const videoBlobRes = await fetch(data.videoUrl);
-          const blob = await videoBlobRes.blob();
-          const blobUrl = URL.createObjectURL(blob);
-
-          // Ask server to delete the server-side copy — video now lives only in the browser
-          fetch(apiUrl("/api/video-cleanup"), {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ videoPath: data.videoUrl }),
-          }).catch(() => {}); // fire-and-forget
-
-          setVideoUrl(blobUrl);
-          setStage("done");
+          // 1. Success! The video is already here in 'data.videoBase64'
           setProgress({ label: "Video ready!", pct: 100 });
+
+          const finalVideoUrl = data.videoBase64;
+
+          // 2. Update the local state
+          setVideoUrl(finalVideoUrl);
+          setStage("done");
           setWatchPct(0);
           setVideoEnded(false);
           maxWatchedRef.current = 0;
-          onChange({ imagePath: currentPreview, videoUrl: blobUrl });
+
+          // 3. Notify the survey parent component
+          onChange({ imagePath: currentPreview, videoUrl: finalVideoUrl });
+
+          // NOTE: We no longer need to fetch a blob or call /api/video-cleanup
+          // because the server never saved a file to the disk.
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
         } else if (pollCountRef.current >= MAX_POLLS) {

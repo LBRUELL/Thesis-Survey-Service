@@ -9,7 +9,7 @@ const fetch = require("node-fetch");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const GEMINI_API_KEY = "AIzaSyBWOvvQdeIJVDEQYtUBNj76uoxDh8wb6lU";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Feature Config ────────────────────────────────────────────────────────────
@@ -321,7 +321,6 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
-// Poll video generation status
 app.get("/api/video-status", async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
@@ -329,11 +328,10 @@ app.get("/api/video-status", async (req, res) => {
     }
 
     const { operationName } = req.query;
-    if (!operationName)
-      return res.status(400).json({ error: "operationName is required" });
+    if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
     const pollRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
+        `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
     );
 
     if (!pollRes.ok) {
@@ -343,39 +341,30 @@ app.get("/api/video-status", async (req, res) => {
 
     const data = await pollRes.json();
 
-    if (!data.done) {
-      return res.json({ status: "processing" });
-    }
+    if (!data.done) return res.json({ status: "processing" });
+    if (data.error) return res.json({ status: "error", error: data.error.message });
 
-    if (data.error) {
-      return res.json({ status: "error", error: data.error.message });
-    }
-
-    // Extract video URI from response
-    const samples =
-      data.response?.generateVideoResponse?.generatedSamples || [];
-    if (!samples.length) {
-      return res.json({ status: "error", error: "No video generated" });
-    }
+    const samples = data.response?.generateVideoResponse?.generatedSamples || [];
+    if (!samples.length) return res.json({ status: "error", error: "No video generated" });
 
     const videoUri = samples[0]?.video?.uri;
-    if (!videoUri) {
-      return res.json({ status: "error", error: "No video URI in response" });
-    }
+    if (!videoUri) return res.json({ status: "error", error: "No video URI in response" });
 
-    // Download the video and store it locally so we can serve it
-    const videoId = uuidv4();
-    const videoFilename = `${videoId}.mp4`;
-    const videoPath = path.join(__dirname, "videos", videoFilename);
-
+    // --- THE CHANGE IS HERE ---
+    // Instead of saving to a file, we download the video into a Buffer
     const videoDownload = await fetch(videoUri);
-    const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
-    await fs.writeFile(videoPath, videoBuffer);
+    const arrayBuffer = await videoDownload.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Convert the buffer directly to a Base64 string
+    const base64Video = buffer.toString("base64");
 
     res.json({
       status: "complete",
-      videoUrl: `/videos/${videoFilename}`,
+      // Send the video data directly back to the browser
+      videoBase64: `data:video/mp4;base64,${base64Video}`
     });
+
   } catch (err) {
     console.error("Video status error:", err);
     res.status(500).json({ error: err.message });
@@ -409,37 +398,35 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
     const imageBuffer = await fs.readFile(req.file.path);
-    const base64Image = imageBuffer.toString("base64");
-    const mimeType = req.file.mimetype;
+    const base64ImageInput = imageBuffer.toString("base64");
+    const mimeTypeInput = req.file.mimetype;
 
-    // Clean up the upload immediately — we only needed it for base64
+    // Clean up the user's uploaded selfie immediately
     await fs.unlink(req.file.path).catch(() => {});
 
-    // gemini-2.0-flash-exp supports image output via responseModalities
     const genRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: mimeType, data: base64Image } },
-              ],
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: mimeTypeInput, data: base64ImageInput } },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ["image"],
             },
-          ],
-          generationConfig: {
-            responseModalities: ["image", "text"],
-          },
-        }),
-      }
+          }),
+        }
     );
 
     if (!genRes.ok) {
       const errBody = await genRes.json().catch(() => ({}));
-      console.error("Gemini image gen error:", errBody);
       return res.status(502).json({
         error: "Gemini image generation error",
         details: errBody?.error?.message || "Unknown error",
@@ -447,8 +434,6 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     }
 
     const data = await genRes.json();
-
-    // Find the image part in the response
     const parts = data.candidates?.[0]?.content?.parts || [];
     const imagePart = parts.find((p) => p.inlineData?.mimeType?.startsWith("image/"));
 
@@ -456,61 +441,17 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
       return res.status(502).json({ error: "No image returned by Gemini" });
     }
 
-    // Save the generated image temporarily for serving (deleted after client fetches it)
-    const genImageId = uuidv4();
-    const ext = imagePart.inlineData.mimeType.split("/")[1] || "png";
-    const genFilename = `${genImageId}.${ext}`;
-    const genPath = path.join(__dirname, "videos", genFilename); // reuse the videos dir
-    await fs.writeFile(genPath, Buffer.from(imagePart.inlineData.data, "base64"));
-
     if (deviceId) await recordUsage(deviceId, "images");
+
+    // SUCCESS: Send the data directly as a Base64 string
+    // This removes the need for a temporary file and the cleanup call
     res.json({
       status: "complete",
-      imageUrl: `/videos/${genFilename}`,
-      mimeType: imagePart.inlineData.mimeType,
+      imageBase64: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
     });
+
   } catch (err) {
     console.error("Generate image error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Delete a generated image after the client has fetched it
-app.delete("/api/image-cleanup", async (req, res) => {
-  try {
-    const { imagePath } = req.body;
-    if (!imagePath || !imagePath.startsWith("/videos/")) {
-      return res.status(400).json({ error: "Invalid image path" });
-    }
-    const filename = path.basename(imagePath);
-    if (!/^[a-f0-9-]+\.(png|jpg|jpeg|webp)$/i.test(filename)) {
-      return res.status(400).json({ error: "Invalid filename" });
-    }
-    await fs.unlink(path.join(__dirname, "videos", filename)).catch(() => {});
-    res.json({ deleted: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── Video Cleanup ─────────────────────────────────────────────────────────────
-
-// Called by the client after it has loaded the video into a blob URL
-app.delete("/api/video-cleanup", async (req, res) => {
-  try {
-    const { videoPath } = req.body; // e.g. "/videos/uuid.mp4"
-    if (!videoPath || !videoPath.startsWith("/videos/")) {
-      return res.status(400).json({ error: "Invalid video path" });
-    }
-    const filename = path.basename(videoPath);
-    // Validate it looks like a UUID filename (no path traversal)
-    if (!/^[a-f0-9-]+\.mp4$/i.test(filename)) {
-      return res.status(400).json({ error: "Invalid filename" });
-    }
-    const fullPath = path.join(__dirname, "videos", filename);
-    await fs.unlink(fullPath).catch(() => {}); // silently ignore if already gone
-    res.json({ deleted: true });
-  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

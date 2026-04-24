@@ -43,71 +43,30 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
 
     const formData = new FormData();
     formData.append("image", file);
-    formData.append(
-      "prompt",
-      imagePrompt || "Generate a high-quality styled image based on this photo."
-    );
-
-    const MAX_RETRIES = 4;
-    const RETRY_DELAYS = [4000, 8000, 16000, 30000]; // ms between attempts
+    formData.append("prompt", imagePrompt || "Generate a high-quality styled image.");
 
     try {
-      let res, data;
+      setProgress({ label: "Gemini is generating…", pct: 50 });
 
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        if (attempt > 0) {
-          const wait = RETRY_DELAYS[attempt - 1];
-          const secs = Math.round(wait / 1000);
-          setProgress({
-            label: `Servers busy — retrying in ${secs}s… (attempt ${attempt + 1} of ${MAX_RETRIES + 1})`,
-            pct: 30 + attempt * 8,
-            retry: true,
-          });
-          await new Promise((r) => setTimeout(r, wait));
-          setProgress({
-            label: `Retrying… (attempt ${attempt + 1} of ${MAX_RETRIES + 1})`,
-            pct: 35 + attempt * 8,
-          });
-        } else {
-          setProgress({ label: "Sending to Gemini…", pct: 50 });
-        }
+      const res = await fetch(apiUrl("/api/generate-image"), {
+        method: "POST",
+        headers: { "x-device-id": getDeviceId() },
+        body: formData,
+      });
 
-        res = await fetch(apiUrl("/api/generate-image"), {
-          method: "POST",
-          headers: { "x-device-id": getDeviceId() },
-          body: formData,
-        });
-        data = await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
 
-        // Only retry on server-busy errors
-        if (res.ok || (res.status !== 503 && res.status !== 429)) break;
+      // SUCCESS: We expect 'data.imageBase64' from the server now
+      // It should look like "data:image/png;base64,iVBORw0KG..."
+      const finalImageUrl = data.imageBase64;
 
-        if (attempt === MAX_RETRIES) {
-          throw new Error("The image generation service is currently overloaded. Please wait a minute and try uploading again.");
-        }
-      }
-
-      if (!res.ok) throw new Error(data.details || data.error || "Image generation failed");
-
-      setProgress({ label: "Loading generated image…", pct: 90 });
-
-      // Fetch the image into a blob URL so the server copy can be deleted
-      const blobRes = await fetch(data.imageUrl);
-      const blob = await blobRes.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      // Ask server to delete the temporary file
-      fetch(apiUrl("/api/image-cleanup"), {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePath: data.imageUrl }),
-      }).catch(() => {});
-
-      setGeneratedUrl(blobUrl);
+      setGeneratedUrl(finalImageUrl);
       setStage("done");
       setProgress(null);
       setQuota((q) => q ? { ...q, used: q.used + 1 } : q);
-      onChange({ imagePath: localUrl, generatedUrl: blobUrl });
+
+      onChange({ imagePath: localUrl, generatedUrl: finalImageUrl });
     } catch (err) {
       setError(err.message);
       setStage("idle");
