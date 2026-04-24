@@ -224,3 +224,13 @@
   font-weight: 500;
 }
 
+.retryNote {
+  font-size: 0.78125rem;
+  color: #7a5c10;
+  background: #fff8e8;
+  border: 1px solid #f0d490;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  text-align: center;
+  margin-top: 4px;
+}

@@ -147,43 +147,12 @@
 }
 .resetBtn:hover { color: var(--ink); }
 
-/* ── Side-by-side compare ── */
-
-.compareRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-}
-
-.compareCol {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.compareLabel {
-  font-size: 0.75rem;
-  color: var(--ink-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 500;
-}
-
-.compareImg {
+.generatedImg {
   width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
   display: block;
-}
-
-.arrow {
-  font-size: 1.5rem;
-  color: var(--accent);
-  flex-shrink: 0;
+  max-height: 520px;
+  object-fit: contain;
+  background: var(--surface-raised);
 }
 
 /* ── Error ── */
@@ -213,3 +182,12 @@
   font-weight: 500;
 }
 
+.retryNote {
+  font-size: 0.78125rem;
+  color: #7a5c10;
+  background: #fff8e8;
+  border: 1px solid #f0d490;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  text-align: center;
+}

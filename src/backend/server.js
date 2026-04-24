@@ -9,7 +9,7 @@ const fetch = require("node-fetch");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY = "AIzaSyBWOvvQdeIJVDEQYtUBNj76uoxDh8wb6lU";
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Feature Config ────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const CREATE_PASSWORD = process.env.CREATE_PASSWORD || "research2025";
 
 // Per-device generation limits — 0 = unlimited
-const MAX_VIDEOS_PER_DEVICE = parseInt(process.env.MAX_VIDEOS_PER_DEVICE || "5", 10);
+const MAX_VIDEOS_PER_DEVICE = parseInt(process.env.MAX_VIDEOS_PER_DEVICE || "2", 10);
 const MAX_IMAGES_PER_DEVICE = parseInt(process.env.MAX_IMAGES_PER_DEVICE || "10", 10);
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
 
     // gemini-2.0-flash-exp supports image output via responseModalities
     const genRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

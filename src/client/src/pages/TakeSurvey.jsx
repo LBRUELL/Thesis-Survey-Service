@@ -12,7 +12,7 @@ function interpolatePrompt(template, answers, allQuestions) {
   return template.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
     const trimmed = varName.trim();
     const q = allQuestions.find(
-      (q) => q.variableName && q.variableName.trim() === trimmed
+        (q) => q.variableName && q.variableName.trim() === trimmed
     );
     if (q && answers[q.id] != null && answers[q.id] !== "") {
       return String(answers[q.id]);
@@ -42,29 +42,29 @@ export default function TakeSurvey() {
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setSurvey(data);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.error) throw new Error(data.error);
+          setSurvey(data);
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) {
     return (
-      <div className={styles.centered}>
-        <div className="spinner" />
-        <p className="text-muted" style={{ marginTop: 16 }}>Loading survey…</p>
-      </div>
+        <div className={styles.centered}>
+          <div className="spinner" />
+          <p className="text-muted" style={{ marginTop: 16 }}>Loading survey…</p>
+        </div>
     );
   }
   if (error) {
     return (
-      <div className={styles.centered}>
-        <h2>Survey not found</h2>
-        <p className="text-muted" style={{ marginTop: 8 }}>{error}</p>
-      </div>
+        <div className={styles.centered}>
+          <h2>Survey not found</h2>
+          <p className="text-muted" style={{ marginTop: 8 }}>{error}</p>
+        </div>
     );
   }
 
@@ -105,6 +105,13 @@ export default function TakeSurvey() {
           if (val == null) errors[q.id] = "Please select a rating.";
         } else if (q.type === "image_video" || q.type === "image_image") {
           if (!val) errors[q.id] = "Please upload an image.";
+        }
+      }
+
+      // Numbers-only validation (applies whether required or not, if a value was entered)
+      if (q.type === "text" && q.numbersOnly && val?.trim()) {
+        if (isNaN(Number(val.trim()))) {
+          errors[q.id] = "Please enter a valid number.";
         }
       }
 
@@ -165,142 +172,154 @@ export default function TakeSurvey() {
   };
 
   return (
-    <div className={styles.page}>
-      <div ref={topRef} />
+      <div className={styles.page}>
+        <div ref={topRef} />
 
-      <header className={styles.header}>
-        <span className={styles.logo}>Forma</span>
-        <div className={styles.progressWrap}>
-          <ProgressBar current={currentPage + 1} total={pages.length} />
-        </div>
-      </header>
-
-      <main className={styles.main}>
-        {currentPage === 0 && (
-          <div className={styles.surveyIntro}>
-            <h1>{survey.title}</h1>
-            {survey.description && (
-              <p className={styles.surveyDesc}>{survey.description}</p>
-            )}
+        <header className={styles.header}>
+          <span className={styles.logo}>Forma</span>
+          <div className={styles.progressWrap}>
+            <ProgressBar current={currentPage + 1} total={pages.length} />
           </div>
-        )}
+        </header>
 
-        <div className={`${styles.pageCard} fade-in`} key={currentPage}>
-          {page.title && <h2 className={styles.pageTitle}>{page.title}</h2>}
+        <main className={styles.main}>
+          {currentPage === 0 && (
+              <div className={styles.surveyIntro}>
+                <h1>{survey.title}</h1>
+                {survey.description && (
+                    <p className={styles.surveyDesc}>{survey.description}</p>
+                )}
+              </div>
+          )}
 
-          <div className={styles.questions}>
-            {page.questions.map((q, qi) => {
-              const promptTemplate = q.type === "image_image" ? q.imagePrompt : q.videoPrompt;
-              const resolvedPrompt = interpolatePrompt(promptTemplate, answers, allQuestions);
+          <div className={`${styles.pageCard} fade-in`} key={currentPage}>
+            {page.title && <h2 className={styles.pageTitle}>{page.title}</h2>}
 
-              return (
-                <div key={q.id} className={styles.question}>
-                  <p className={styles.questionText}>
-                    {qi + 1}. {q.question}
-                    {q.required && <span className={styles.required}>*</span>}
-                  </p>
+            <div className={styles.questions}>
+              {page.questions.map((q, qi) => {
+                const promptTemplate = q.type === "image_image" ? q.imagePrompt : q.videoPrompt;
+                const resolvedPrompt = interpolatePrompt(promptTemplate, answers, allQuestions);
 
-                  {q.type === "text" && (
-                    <input
-                      className="input"
-                      value={answers[q.id] || ""}
-                      onChange={(e) => setAnswer(q.id, e.target.value)}
-                      placeholder="Your answer…"
-                    />
-                  )}
+                return (
+                    <div key={q.id} className={styles.question}>
+                      <p className={styles.questionText}>
+                        {qi + 1}. {q.question}
+                        {q.required && <span className={styles.required}>*</span>}
+                      </p>
 
-                  {q.type === "textarea" && (
-                    <textarea
-                      className="input textarea"
-                      value={answers[q.id] || ""}
-                      onChange={(e) => setAnswer(q.id, e.target.value)}
-                      placeholder="Your answer…"
-                    />
-                  )}
+                      {q.type === "text" && !q.numbersOnly && (
+                          <input
+                              className="input"
+                              value={answers[q.id] || ""}
+                              onChange={(e) => setAnswer(q.id, e.target.value)}
+                              placeholder="Your answer…"
+                          />
+                      )}
 
-                  {(q.type === "likert5" || q.type === "likert7") && (
-                    <LikertScale
-                      type={q.type}
-                      value={answers[q.id] ?? null}
-                      onChange={(v) => setAnswer(q.id, v)}
-                    />
-                  )}
+                      {q.type === "text" && q.numbersOnly && (
+                          <input
+                              className="input"
+                              type="number"
+                              inputMode="decimal"
+                              value={answers[q.id] || ""}
+                              onChange={(e) => setAnswer(q.id, e.target.value)}
+                              placeholder="Enter a number…"
+                              style={{ maxWidth: 200 }}
+                          />
+                      )}
 
-                  {q.type === "image_video" && (
-                    <>
-                      <ImageVideoQuestion
-                        videoPrompt={resolvedPrompt}
-                        value={answers[q.id] || null}
-                        onChange={(val) => {
-                          setAnswer(q.id, val);
-                          if (!val?.videoUrl) {
-                            setVideoComplete((prev) => {
-                              const next = { ...prev };
-                              delete next[q.id];
-                              return next;
-                            });
-                          }
-                        }}
-                        onVideoComplete={() => markVideoComplete(q.id)}
-                      />
+                      {q.type === "textarea" && (
+                          <textarea
+                              className="input textarea"
+                              value={answers[q.id] || ""}
+                              onChange={(e) => setAnswer(q.id, e.target.value)}
+                              placeholder="Your answer…"
+                          />
+                      )}
 
-                      {answers[q.id]?.videoUrl && !videoComplete[q.id] && (
-                        <div
-                          ref={(el) => (videoWarningRefs.current[q.id] = el)}
-                          className={`${styles.videoGateWarning} ${shakeId === q.id ? styles.shake : ""}`}
-                        >
-                          <span className={styles.videoGateIcon}>▶</span>
-                          <span>
+                      {(q.type === "likert5" || q.type === "likert7") && (
+                          <LikertScale
+                              type={q.type}
+                              value={answers[q.id] ?? null}
+                              onChange={(v) => setAnswer(q.id, v)}
+                          />
+                      )}
+
+                      {q.type === "image_video" && (
+                          <>
+                            <ImageVideoQuestion
+                                videoPrompt={resolvedPrompt}
+                                value={answers[q.id] || null}
+                                onChange={(val) => {
+                                  setAnswer(q.id, val);
+                                  if (!val?.videoUrl) {
+                                    setVideoComplete((prev) => {
+                                      const next = { ...prev };
+                                      delete next[q.id];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                onVideoComplete={() => markVideoComplete(q.id)}
+                            />
+
+                            {answers[q.id]?.videoUrl && !videoComplete[q.id] && (
+                                <div
+                                    ref={(el) => (videoWarningRefs.current[q.id] = el)}
+                                    className={`${styles.videoGateWarning} ${shakeId === q.id ? styles.shake : ""}`}
+                                >
+                                  <span className={styles.videoGateIcon}>▶</span>
+                                  <span>
                             You must watch the entire video before you can continue. Press play and let it finish — the "Next" button will unlock automatically.
                           </span>
-                        </div>
+                                </div>
+                            )}
+                          </>
                       )}
-                    </>
-                  )}
 
-                  {q.type === "image_image" && (
-                    <ImageImageQuestion
-                      imagePrompt={resolvedPrompt}
-                      value={answers[q.id] || null}
-                      onChange={(val) => setAnswer(q.id, val)}
-                    />
-                  )}
+                      {q.type === "image_image" && (
+                          <ImageImageQuestion
+                              imagePrompt={resolvedPrompt}
+                              value={answers[q.id] || null}
+                              onChange={(val) => setAnswer(q.id, val)}
+                          />
+                      )}
 
-                  {validationErrors[q.id] && (
-                    <p className={styles.fieldError}>{validationErrors[q.id]}</p>
-                  )}
-                </div>
-              );
-            })}
+                      {validationErrors[q.id] && (
+                          <p className={styles.fieldError}>{validationErrors[q.id]}</p>
+                      )}
+                    </div>
+                );
+              })}
+            </div>
+
+            {validationErrors._submit && (
+                <div className={styles.submitError}>⚠ {validationErrors._submit}</div>
+            )}
           </div>
 
-          {validationErrors._submit && (
-            <div className={styles.submitError}>⚠ {validationErrors._submit}</div>
-          )}
-        </div>
+          <div className={styles.nav}>
+            {currentPage > 0 ? (
+                <button className="btn btn-outline" onClick={goBack}>← Back</button>
+            ) : (
+                <span />
+            )}
 
-        <div className={styles.nav}>
-          {currentPage > 0 ? (
-            <button className="btn btn-outline" onClick={goBack}>← Back</button>
-          ) : (
-            <span />
-          )}
-
-          {isLast ? (
-            <button
-              className="btn btn-accent btn-lg"
-              onClick={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? "Submitting…" : "Submit survey"}
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={goNext}>
-              Next →
-            </button>
-          )}
-        </div>
-      </main>
-    </div>
+            {isLast ? (
+                <button
+                    className="btn btn-accent btn-lg"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                >
+                  {submitting ? "Submitting…" : "Submit survey"}
+                </button>
+            ) : (
+                <button className="btn btn-primary" onClick={goNext}>
+                  Next →
+                </button>
+            )}
+          </div>
+        </main>
+      </div>
   );
 }
