@@ -140,11 +140,6 @@ export default function TakeSurvey() {
     topRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const goBack = () => {
-    setCurrentPage((p) => p - 1);
-    topRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   const handleSubmit = async () => {
     if (!validatePage()) return;
     setSubmitting(true);
@@ -300,12 +295,6 @@ export default function TakeSurvey() {
         </div>
 
         <div className={styles.nav}>
-          {currentPage > 0 ? (
-            <button className="btn btn-outline" onClick={goBack}>← Back</button>
-          ) : (
-            <span />
-          )}
-
           {isLast ? (
             <button
               className="btn btn-accent btn-lg"
