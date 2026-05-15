@@ -46,3 +46,10 @@
   font-style: italic;
   color: var(--ink);
 }
+
+.countdown {
+  margin-top: 20px;
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  animation: fadeIn 0.4s ease;
+}

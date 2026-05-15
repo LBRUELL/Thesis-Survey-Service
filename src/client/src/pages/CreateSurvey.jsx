@@ -40,6 +40,8 @@ function CreateSurveyBuilder() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [completionMessage, setCompletionMessage] = useState("");
+  const [redirectUrl, setRedirectUrl] = useState("");
   const [pages, setPages] = useState([newPage()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -103,7 +105,7 @@ function CreateSurveyBuilder() {
       const res = await fetch(apiUrl("/api/surveys"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description, pages }),
+        body: JSON.stringify({ title: title.trim(), description, pages, completionMessage, redirectUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create survey");
@@ -119,7 +121,7 @@ function CreateSurveyBuilder() {
     <div className={styles.page}>
       <header className={styles.header}>
         <Link to="/" className={styles.back}>← Back</Link>
-        <span className={styles.logo}>Forma</span>
+        <span className={styles.logo}>AI Try-On Platform</span>
         <button
           className="btn btn-accent"
           onClick={handleSubmit}
@@ -174,6 +176,27 @@ function CreateSurveyBuilder() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Tell participants what this survey is about…"
               />
+            </div>
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Completion message (optional)</label>
+              <textarea
+                className="input textarea"
+                value={completionMessage}
+                onChange={(e) => setCompletionMessage(e.target.value)}
+                placeholder="Message shown to participants after submitting. Defaults to a generic thank-you message."
+              />
+            </div>
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Redirect URL after completion (optional)</label>
+              <input
+                className="input"
+                value={redirectUrl}
+                onChange={(e) => setRedirectUrl(e.target.value)}
+                placeholder="https://example.com/next-step"
+              />
+              <span className="text-xs text-muted" style={{ marginTop: 3 }}>
+                Participants will be automatically redirected here 3 seconds after submitting.
+              </span>
             </div>
           </div>
 

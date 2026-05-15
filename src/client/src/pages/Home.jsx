@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.logo}>Forma</span>
+        <span className={styles.logo}>AI Try-On Platform</span>
       </header>
 
       <main className={styles.hero}>
@@ -58,7 +58,7 @@ export default function Home() {
       </section>
 
       <footer className={styles.footer}>
-        <span>Forma · Built for research</span>
+        <span>AI Try-On Platform · Built for research</span>
       </footer>
     </div>
   );

@@ -38,7 +38,7 @@ export default function PasswordGate({ onSuccess }) {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <Link to="/" className={styles.logo}>Forma</Link>
+        <Link to="/" className={styles.logo}>AI Try-On Platform</Link>
         <h1>Researcher access</h1>
         <p className={styles.sub}>
           Enter the research team password to create and publish surveys.

@@ -164,7 +164,7 @@ export default function TakeSurvey() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed");
-      navigate("/thank-you", { state: { surveyTitle: survey.title } });
+      navigate("/thank-you", { state: { surveyTitle: survey.title, completionMessage: survey.completionMessage, redirectUrl: survey.redirectUrl } });
     } catch (err) {
       setValidationErrors({ _submit: err.message });
     } finally {
@@ -177,7 +177,7 @@ export default function TakeSurvey() {
       <div ref={topRef} />
 
       <header className={styles.header}>
-        <span className={styles.logo}>Forma</span>
+        <span className={styles.logo}>AI Try-On Platform</span>
         <div className={styles.progressWrap}>
           <ProgressBar current={currentPage + 1} total={pages.length} />
         </div>
