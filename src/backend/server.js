@@ -154,7 +154,7 @@ app.get("/api/usage", async (req, res) => {
 // Create a new survey
 app.post("/api/surveys", async (req, res) => {
   try {
-    const { title, description, pages } = req.body;
+    const { title, description, pages, completionMessage, redirectUrl } = req.body;
     if (!title || !pages?.length) {
       return res.status(400).json({ error: "Title and at least one page are required" });
     }
@@ -166,6 +166,8 @@ app.post("/api/surveys", async (req, res) => {
       adminToken,
       title,
       description: description || "",
+      completionMessage: completionMessage || "",
+      redirectUrl: redirectUrl || "",
       pages,
       createdAt: new Date().toISOString(),
       responseCount: 0,
