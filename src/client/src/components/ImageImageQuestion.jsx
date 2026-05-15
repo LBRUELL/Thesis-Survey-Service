@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { getDeviceId } from "../utils/deviceId.js";
 import { apiUrl } from "../utils/api.js";
+import CameraCapture from "./CameraCapture.jsx";
 import styles from "./ImageImageQuestion.module.css";
 
 export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
@@ -13,6 +14,8 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
   const [error, setError] = useState(null);
 
   const [quota, setQuota] = useState(null);
+
+  const [showCamera, setShowCamera] = useState(false);
 
   const fileRef = useRef();
   const dragRef = useRef(null);
@@ -89,6 +92,7 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
 
   const reset = () => {
     setStage("idle");
+    setShowCamera(false);
     setPreview(null);
     setGeneratedUrl(null);
     setProgress(null);
@@ -102,35 +106,49 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
       {/* ── Idle ── */}
       {stage === "idle" && (
         <>
-          <div
-            ref={dragRef}
-            className={styles.dropZone}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => fileRef.current?.click()}
-          >
-            <span className={styles.dropIcon}>◈</span>
-            <p>Drop your selfie here, or <strong>click to browse</strong></p>
-            <p className="text-xs text-muted">JPEG, PNG, WebP · max 20 MB</p>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
+          {showCamera ? (
+            <CameraCapture
+              onCapture={(file) => { setShowCamera(false); handleFile(file); }}
+              onCancel={() => setShowCamera(false)}
             />
-          </div>
-          {quota && quota.limit > 0 && (
-            <p className={styles.quotaBadge}>
-              {quota.limit - quota.used > 0
-                ? `${quota.limit - quota.used} of ${quota.limit} image generations remaining on this device`
-                : "⚠ You have used all image generations allowed on this device"}
-            </p>
+          ) : (
+            <>
+              <button className={styles.cameraBtn} onClick={() => setShowCamera(true)}>
+                <span>📷</span>
+                <span>Take a photo with your camera</span>
+              </button>
+              <div className={styles.divider}><span>or</span></div>
+              <div
+                ref={dragRef}
+                className={styles.dropZone}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={() => fileRef.current?.click()}
+              >
+                <span className={styles.dropIcon}>◈</span>
+                <p>Drop your selfie here, or <strong>click to browse</strong></p>
+                <p className="text-xs text-muted">JPEG, PNG, WebP · max 20 MB</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
+                />
+              </div>
+              {quota && quota.limit > 0 && (
+                <p className={styles.quotaBadge}>
+                  {quota.limit - quota.used > 0
+                    ? `${quota.limit - quota.used} of ${quota.limit} image generations remaining on this device`
+                    : "⚠ You have used all image generations allowed on this device"}
+                </p>
+              )}
+              <p className={styles.privacyNote}>
+                🔒 The generated image is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
+              </p>
+            </>
           )}
-          <p className={styles.privacyNote}>
-            🔒 The generated image is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
-          </p>
         </>
       )}
 
