@@ -9,18 +9,15 @@ const MAX_POLLS = 60; // 3 minutes max
 
 export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onChange, onVideoComplete }) {
   const [stage, setStage] = useState(
-    value?.videoUrl ? "done" : value?.imagePath ? "uploaded" : "idle"
+      value?.videoUrl ? "done" : value?.imagePath ? "uploaded" : "idle"
   );
   const [preview, setPreview] = useState(value?.imagePath || null);
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
   const [videoUrl, setVideoUrl] = useState(value?.videoUrl || null);
-  // Track how much of the video the user has watched
   const [watchPct, setWatchPct] = useState(0);
   const [videoEnded, setVideoEnded] = useState(false);
-
-  const [quota, setQuota] = useState(null); // { used, limit }
-
+  const [quota, setQuota] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
 
   const fileRef = useRef();
@@ -28,22 +25,20 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
   const pollCountRef = useRef(0);
   const pollTimerRef = useRef(null);
   const dragRef = useRef(null);
-  const maxWatchedRef = useRef(0); // highest currentTime reached (handles scrubbing)
+  const maxWatchedRef = useRef(0);
 
-  // Fetch current quota for this device on mount
   useEffect(() => {
     const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
     fetch(url, { headers: { "x-device-id": getDeviceId() } })
-      .then((r) => r.json())
-      .then((d) => setQuota({ used: d.videos, limit: d.limits.videos }))
-      .catch(() => {});
+        .then((r) => r.json())
+        .then((d) => setQuota({ used: d.videos, limit: d.limits.videos }))
+        .catch(() => {});
   }, [surveyId]);
 
   // ── Video playback tracking ──────────────────────────────────────────────
   const handleTimeUpdate = useCallback(() => {
     const el = videoRef.current;
     if (!el || !el.duration) return;
-    // Only advance maxWatched forward — scrubbing ahead doesn't count
     if (el.currentTime > maxWatchedRef.current) {
       maxWatchedRef.current = el.currentTime;
     }
@@ -57,7 +52,6 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
     onVideoComplete?.();
   }, [onVideoComplete]);
 
-  // Also mark complete when scrubbing reveals the user has seen everything
   const handleSeeked = useCallback(() => {
     const el = videoRef.current;
     if (!el || !el.duration) return;
@@ -158,36 +152,34 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
 
         if (data.status === "complete") {
-          setProgress({ label: "Video ready!", pct: 100 });
+          setProgress({ label: "Loading your video…", pct: 95 });
 
-          try {
-            // 1. Use the browser's built-in fetch to convert the Data URI to a Blob
-            // This is more memory-efficient than manual base64 decoding
-            const response = await fetch(data.videoBase64);
-            const videoBlob = await response.blob();
+          // Fetch the video file from the backend using apiUrl —
+          // it lives on the backend Railway service, not the frontend
+          const videoBlobRes = await fetch(apiUrl(data.videoUrl));
+          const blob = await videoBlobRes.blob();
+          const blobUrl = URL.createObjectURL(blob);
 
-            // 2. Create a clean, temporary local URL
-            const blobUrl = URL.createObjectURL(videoBlob);
+          // Ask server to delete the temporary file now that we have it in memory
+          fetch(apiUrl("/api/video-cleanup"), {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ videoPath: data.videoUrl }),
+          }).catch(() => {});
 
-            // 3. Update the state
-            setVideoUrl(blobUrl);
-            setStage("done");
-            setWatchPct(0);
-            setVideoEnded(false);
+          setVideoUrl(blobUrl);
+          setStage("done");
+          setProgress(null);
+          setWatchPct(0);
+          setVideoEnded(false);
+          maxWatchedRef.current = 0;
+          onChange({ imagePath: currentPreview, videoUrl: blobUrl });
 
-            // 4. Important: Pass the Blob URL to the parent component
-            onChange({ imagePath: currentPreview, videoUrl: blobUrl });
-
-          } catch (blobError) {
-            console.error("Error creating video blob:", blobError);
-            setError("Failed to process video data.");
-          }
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
         } else if (pollCountRef.current >= MAX_POLLS) {
           throw new Error("Video generation timed out. Please try again.");
         } else {
-          // Continue polling
           pollVideo(operationName, currentPreview);
         }
       } catch (err) {
@@ -228,141 +220,140 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
   };
 
   return (
-    <div className={styles.wrapper}>
-      {/* ── Idle / drop zone ── */}
-      {stage === "idle" && (
-        <>
-          {showCamera ? (
-            <CameraCapture
-              onCapture={(file) => { setShowCamera(false); handleFile(file); }}
-              onCancel={() => setShowCamera(false)}
-            />
-          ) : (
+      <div className={styles.wrapper}>
+        {/* ── Idle / drop zone ── */}
+        {stage === "idle" && (
             <>
-              <button className={styles.cameraBtn} onClick={() => setShowCamera(true)}>
-                <span>📷</span>
-                <span>Take a photo with your camera</span>
-              </button>
-              <div className={styles.divider}><span>or</span></div>
-              <div
-                ref={dragRef}
-                className={styles.dropZone}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                onClick={() => fileRef.current?.click()}
-              >
-                <span className={styles.dropIcon}>⬡</span>
-                <p>Drop your selfie here, or <strong>click to browse</strong></p>
-                <p className="text-xs text-muted">JPEG, PNG, WebP · max 20 MB</p>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
-                />
-              </div>
-              {quota && quota.limit > 0 && (
-                <p className={styles.quotaBadge}>
-                  {quota.limit - quota.used > 0
-                    ? `${quota.limit - quota.used} of ${quota.limit} video generations remaining on this device`
-                    : "⚠ You have used all video generations allowed on this device"}
-                </p>
+              {showCamera ? (
+                  <CameraCapture
+                      onCapture={(file) => { setShowCamera(false); handleFile(file); }}
+                      onCancel={() => setShowCamera(false)}
+                  />
+              ) : (
+                  <>
+                    <button className={styles.cameraBtn} onClick={() => setShowCamera(true)}>
+                      <span>📷</span>
+                      <span>Take a photo with your camera</span>
+                    </button>
+                    <div className={styles.divider}><span>or</span></div>
+                    <div
+                        ref={dragRef}
+                        className={styles.dropZone}
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onDrop={onDrop}
+                        onClick={() => fileRef.current?.click()}
+                    >
+                      <span className={styles.dropIcon}>⬡</span>
+                      <p>Drop your selfie here, or <strong>click to browse</strong></p>
+                      <p className="text-xs text-muted">JPEG, PNG, WebP · max 20 MB</p>
+                      <input
+                          ref={fileRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
+                      />
+                    </div>
+                    {quota && quota.limit > 0 && (
+                        <p className={styles.quotaBadge}>
+                          {quota.limit - quota.used > 0
+                              ? `${quota.limit - quota.used} of ${quota.limit} video generations remaining on this device`
+                              : "⚠ You have used all video generations allowed on this device"}
+                        </p>
+                    )}
+                    <p className={styles.privacyNote}>
+                      🔒 The generated video is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
+                    </p>
+                  </>
               )}
-              <p className={styles.privacyNote}>
-                🔒 The generated video is displayed only to you. It is not stored in any database and is automatically removed from our server as soon as it has loaded in your browser.
-              </p>
             </>
-          )}
-        </>
-      )}
+        )}
 
-      {/* ── Uploading / generating ── */}
-      {(stage === "uploading" || stage === "generating") && (
-        <div className={styles.processingCard}>
-          {preview && (
-            <img src={preview} alt="Uploaded" className={styles.thumbSmall} />
-          )}
-          <div className={styles.processingInfo}>
-            <div className={styles.progressLabel}>{progress?.label}</div>
-            <div className={styles.progressBar}>
-              <div className={styles.progressFill} style={{ width: `${progress?.pct ?? 0}%` }} />
+        {/* ── Uploading / generating ── */}
+        {(stage === "uploading" || stage === "generating") && (
+            <div className={styles.processingCard}>
+              {preview && (
+                  <img src={preview} alt="Uploaded" className={styles.thumbSmall} />
+              )}
+              <div className={styles.processingInfo}>
+                <div className={styles.progressLabel}>{progress?.label}</div>
+                <div className={styles.progressBar}>
+                  <div className={styles.progressFill} style={{ width: `${progress?.pct ?? 0}%` }} />
+                </div>
+                {progress?.retry ? (
+                    <p className={styles.retryNote}>
+                      ⏳ Gemini VEO servers are busy right now — your request will retry automatically. Please keep this page open.
+                    </p>
+                ) : (
+                    <p className="text-xs text-muted" style={{ marginTop: 6 }}>
+                      Gemini VEO is transforming your image using the configured prompt.
+                    </p>
+                )}
+              </div>
             </div>
-            {progress?.retry ? (
-              <p className={styles.retryNote}>
-                ⏳ Gemini VEO servers are busy right now — your request will retry automatically. Please keep this page open.
-              </p>
-            ) : (
-              <p className="text-xs text-muted" style={{ marginTop: 6 }}>
-                Gemini VEO is transforming your image using the configured prompt.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Done — show video ── */}
-      {stage === "done" && videoUrl && (
-        <div className={styles.videoCard}>
-          <div className={styles.videoHeader}>
-            <span className={styles.badge}>✓ AI Video generated</span>
-            <button className={styles.resetBtn} onClick={reset}>
-              Upload different image
-            </button>
-          </div>
+        {/* ── Done — show video ── */}
+        {stage === "done" && videoUrl && (
+            <div className={styles.videoCard}>
+              <div className={styles.videoHeader}>
+                <span className={styles.badge}>✓ AI Video generated</span>
+                <button className={styles.resetBtn} onClick={reset}>
+                  Upload different image
+                </button>
+              </div>
 
-          {videoUrl && (
               <video
-                  key={videoUrl}  // <--- ADD THIS LINE
+                  key={videoUrl}
+                  ref={videoRef}
                   width="100%"
                   controls
-                  onTimeUpdate={(e) => {
-                    const pct = (e.target.currentTime / e.target.duration) * 100;
-                    setWatchPct(pct);
-                  }}
-                  onEnded={() => setVideoEnded(true)}
+                  autoPlay
+                  playsInline
+                  onTimeUpdate={handleTimeUpdate}
+                  onEnded={handleEnded}
+                  onSeeked={handleSeeked}
               >
                 <source src={videoUrl} type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
-          )}
 
-          {/* Watch progress bar */}
-          <div className={styles.watchBar}>
-            <div className={styles.watchBarTrack}>
-              <div className={styles.watchBarFill} style={{ width: `${watchPct}%` }} />
-            </div>
-            <span className={styles.watchBarLabel}>
+              {/* Watch progress bar */}
+              <div className={styles.watchBar}>
+                <div className={styles.watchBarTrack}>
+                  <div className={styles.watchBarFill} style={{ width: `${watchPct}%` }} />
+                </div>
+                <span className={styles.watchBarLabel}>
               {videoEnded
-                ? "✓ Watched"
-                : watchPct > 0
-                ? `${Math.round(watchPct)}% watched`
-                : "Play the full video to continue"}
+                  ? "✓ Watched"
+                  : watchPct > 0
+                      ? `${Math.round(watchPct)}% watched`
+                      : "Play the full video to continue"}
             </span>
-          </div>
+              </div>
 
-          {/* Must-watch notice — shown until complete */}
-          {!videoEnded && (
-            <div className={styles.mustWatchNotice}>
-              <span>⚠</span>
-              <span>You must watch the entire video before you can continue to the next page.</span>
+              {/* Must-watch notice — shown until complete */}
+              {!videoEnded && (
+                  <div className={styles.mustWatchNotice}>
+                    <span>⚠</span>
+                    <span>You must watch the entire video before you can continue to the next page.</span>
+                  </div>
+              )}
+
+              <p className={styles.privacyNote} style={{ margin: "0 16px 14px" }}>
+                🔒 This video is displayed only to you and has already been removed from our server.
+              </p>
             </div>
-          )}
+        )}
 
-          <p className={styles.privacyNote} style={{ margin: "0 16px 14px" }}>
-            🔒 This video is displayed only to you and has already been removed from our server.
-          </p>
-        </div>
-      )}
-
-      {/* ── Error ── */}
-      {error && (
-        <div className={styles.errorBox}>
-          <strong>⚠ {error}</strong>
-          <button className="btn btn-ghost text-sm" onClick={reset}>Try again</button>
-        </div>
-      )}
-    </div>
+        {/* ── Error ── */}
+        {error && (
+            <div className={styles.errorBox}>
+              <strong>⚠ {error}</strong>
+              <button className="btn btn-ghost text-sm" onClick={reset}>Try again</button>
+            </div>
+        )}
+      </div>
   );
 }
