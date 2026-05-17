@@ -7,7 +7,7 @@ import styles from "./ImageVideoQuestion.module.css";
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 60; // 3 minutes max
 
-export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVideoComplete }) {
+export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onChange, onVideoComplete }) {
   const [stage, setStage] = useState(
     value?.videoUrl ? "done" : value?.imagePath ? "uploaded" : "idle"
   );
@@ -32,11 +32,12 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
 
   // Fetch current quota for this device on mount
   useEffect(() => {
-    fetch(apiUrl("/api/usage"), { headers: { "x-device-id": getDeviceId() } })
+    const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
+    fetch(url, { headers: { "x-device-id": getDeviceId() } })
       .then((r) => r.json())
       .then((d) => setQuota({ used: d.videos, limit: d.limits.videos }))
       .catch(() => {});
-  }, []);
+  }, [surveyId]);
 
   // ── Video playback tracking ──────────────────────────────────────────────
   const handleTimeUpdate = useCallback(() => {
@@ -87,6 +88,7 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
     const formData = new FormData();
     formData.append("image", file);
     formData.append("prompt", videoPrompt || "Animate this image into a short cinematic scene.");
+    if (surveyId) formData.append("surveyId", surveyId);
 
     const MAX_RETRIES = 4;
     const RETRY_DELAYS = [4000, 8000, 16000, 30000];

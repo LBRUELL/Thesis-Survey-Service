@@ -4,7 +4,7 @@ import { apiUrl } from "../utils/api.js";
 import CameraCapture from "./CameraCapture.jsx";
 import styles from "./ImageImageQuestion.module.css";
 
-export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
+export default function ImageImageQuestion({ surveyId, imagePrompt, value, onChange }) {
   const [stage, setStage] = useState(
     value?.generatedUrl ? "done" : "idle"
   );
@@ -21,11 +21,12 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
   const dragRef = useRef(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/usage"), { headers: { "x-device-id": getDeviceId() } })
+    const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
+    fetch(url, { headers: { "x-device-id": getDeviceId() } })
       .then((r) => r.json())
       .then((d) => setQuota({ used: d.images, limit: d.limits.images }))
       .catch(() => {});
-  }, []);
+  }, [surveyId]);
 
   const handleFile = useCallback(async (file) => {
     if (!file || !file.type.startsWith("image/")) {
@@ -47,6 +48,7 @@ export default function ImageImageQuestion({ imagePrompt, value, onChange }) {
     const formData = new FormData();
     formData.append("image", file);
     formData.append("prompt", imagePrompt || "Generate a high-quality styled image.");
+    if (surveyId) formData.append("surveyId", surveyId);
 
     try {
       setProgress({ label: "Gemini is generating…", pct: 50 });

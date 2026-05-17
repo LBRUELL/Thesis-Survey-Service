@@ -43,6 +43,7 @@ function CreateSurveyBuilder() {
   const [completionMessage, setCompletionMessage] = useState("");
   const [redirectUrl, setRedirectUrl] = useState("");
   const [pages, setPages] = useState([newPage()]);
+  const [deviceLimitEnabled, setDeviceLimitEnabled] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -105,7 +106,7 @@ function CreateSurveyBuilder() {
       const res = await fetch(apiUrl("/api/surveys"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description, pages, completionMessage, redirectUrl }),
+        body: JSON.stringify({ title: title.trim(), description, pages, completionMessage, redirectUrl, deviceLimitEnabled }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create survey");
@@ -198,6 +199,17 @@ function CreateSurveyBuilder() {
                 Participants will be automatically redirected here 3 seconds after submitting.
               </span>
             </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, cursor: "pointer", userSelect: "none" }}>
+              <input
+                type="checkbox"
+                checked={deviceLimitEnabled}
+                onChange={(e) => setDeviceLimitEnabled(e.target.checked)}
+              />
+              <span>Enforce per-device upload limit</span>
+              <span className="text-xs text-muted" style={{ marginLeft: 4 }}>
+                When enabled, each device is limited to the configured number of AI generations (set via <code>MAX_VIDEOS_PER_DEVICE</code> / <code>MAX_IMAGES_PER_DEVICE</code>).
+              </span>
+            </label>
           </div>
 
           {/* Pages */}

@@ -139,13 +139,27 @@ app.post("/api/auth/verify", (req, res) => {
 // Get current device usage (so the client can show remaining quota)
 app.get("/api/usage", async (req, res) => {
   const deviceId = req.headers["x-device-id"];
-  if (!deviceId) return res.json({ videos: 0, images: 0, limits: { videos: MAX_VIDEOS_PER_DEVICE, images: MAX_IMAGES_PER_DEVICE } });
+  const { surveyId } = req.query;
+
+  // Determine effective limits — if the survey disables per-device limits, return 0 (unlimited)
+  let limitVideos = MAX_VIDEOS_PER_DEVICE;
+  let limitImages = MAX_IMAGES_PER_DEVICE;
+  if (surveyId) {
+    const surveys = await getSurveys();
+    const survey = surveys[surveyId];
+    if (survey && survey.deviceLimitEnabled === false) {
+      limitVideos = 0;
+      limitImages = 0;
+    }
+  }
+
+  if (!deviceId) return res.json({ videos: 0, images: 0, limits: { videos: limitVideos, images: limitImages } });
   const usage = await getUsage();
   const d = usage[deviceId] || { videos: 0, images: 0 };
   res.json({
     videos: d.videos || 0,
     images: d.images || 0,
-    limits: { videos: MAX_VIDEOS_PER_DEVICE, images: MAX_IMAGES_PER_DEVICE },
+    limits: { videos: limitVideos, images: limitImages },
   });
 });
 
@@ -154,7 +168,7 @@ app.get("/api/usage", async (req, res) => {
 // Create a new survey
 app.post("/api/surveys", async (req, res) => {
   try {
-    const { title, description, pages, completionMessage, redirectUrl } = req.body;
+    const { title, description, pages, completionMessage, redirectUrl, deviceLimitEnabled } = req.body;
     if (!title || !pages?.length) {
       return res.status(400).json({ error: "Title and at least one page are required" });
     }
@@ -168,6 +182,7 @@ app.post("/api/surveys", async (req, res) => {
       description: description || "",
       completionMessage: completionMessage || "",
       redirectUrl: redirectUrl || "",
+      deviceLimitEnabled: deviceLimitEnabled !== false,
       pages,
       createdAt: new Date().toISOString(),
       responseCount: 0,
@@ -260,17 +275,27 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     }
 
     const deviceId = req.headers["x-device-id"];
-    const limitCheck = await checkLimit(deviceId, "videos");
-    if (!limitCheck.allowed) {
-      return res.status(429).json({
-        error: "Generation limit reached",
-        message: `You have reached the maximum of ${limitCheck.limit} video generations allowed per device.`,
-        used: limitCheck.used,
-        limit: limitCheck.limit,
-      });
+    const { prompt, surveyId } = req.body;
+
+    // Skip limit check if the survey has per-device limits disabled
+    let limitEnabled = true;
+    if (surveyId) {
+      const surveys = await getSurveys();
+      const survey = surveys[surveyId];
+      if (survey && survey.deviceLimitEnabled === false) limitEnabled = false;
     }
 
-    const { prompt } = req.body;
+    if (limitEnabled) {
+      const limitCheck = await checkLimit(deviceId, "videos");
+      if (!limitCheck.allowed) {
+        return res.status(429).json({
+          error: "Generation limit reached",
+          message: `You have reached the maximum of ${limitCheck.limit} video generations allowed per device.`,
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        });
+      }
+    }
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
@@ -387,17 +412,28 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     }
 
     const deviceId = req.headers["x-device-id"];
-    const limitCheck = await checkLimit(deviceId, "images");
-    if (!limitCheck.allowed) {
-      return res.status(429).json({
-        error: "Generation limit reached",
-        message: `You have reached the maximum of ${limitCheck.limit} image generations allowed per device.`,
-        used: limitCheck.used,
-        limit: limitCheck.limit,
-      });
+    const { prompt, surveyId } = req.body;
+
+    // Skip limit check if the survey has per-device limits disabled
+    let limitEnabled = true;
+    if (surveyId) {
+      const surveys = await getSurveys();
+      const survey = surveys[surveyId];
+      if (survey && survey.deviceLimitEnabled === false) limitEnabled = false;
     }
 
-    const { prompt } = req.body;
+    if (limitEnabled) {
+      const limitCheck = await checkLimit(deviceId, "images");
+      if (!limitCheck.allowed) {
+        return res.status(429).json({
+          error: "Generation limit reached",
+          message: `You have reached the maximum of ${limitCheck.limit} image generations allowed per device.`,
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        });
+      }
+    }
+
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 

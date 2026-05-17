@@ -244,6 +244,7 @@ export default function TakeSurvey() {
                   {q.type === "image_video" && (
                     <>
                       <ImageVideoQuestion
+                        surveyId={id}
                         videoPrompt={resolvedPrompt}
                         value={answers[q.id] || null}
                         onChange={(val) => {
@@ -275,6 +276,7 @@ export default function TakeSurvey() {
 
                   {q.type === "image_image" && (
                     <ImageImageQuestion
+                      surveyId={id}
                       imagePrompt={resolvedPrompt}
                       value={answers[q.id] || null}
                       onChange={(val) => setAnswer(q.id, val)}
