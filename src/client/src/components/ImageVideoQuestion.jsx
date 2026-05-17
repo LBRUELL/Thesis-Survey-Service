@@ -77,9 +77,24 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Test fetch failed");
 
-        const bytes = Uint8Array.from(atob(data.videoBase64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "video/mp4" });
-        const blobUrl = URL.createObjectURL(blob);
+        // The test endpoint might be sending base64 containing whitespace or invalid chars
+        // Or if it's returning a URL instead of base64
+        let blobUrl;
+        if (data.videoBase64) {
+             const base64Str = data.videoBase64.replace(/\s/g, ''); // remove any whitespace
+             
+             // The string length must be a multiple of 4.
+             // If not, it means the base64 string is missing padding characters.
+             const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
+
+             const bytes = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
+             const blob = new Blob([bytes], { type: "video/mp4" });
+             blobUrl = URL.createObjectURL(blob);
+        } else if (data.videoUrl) {
+             blobUrl = data.videoUrl;
+        } else {
+             throw new Error("No video data found in response");
+        }
 
         setVideoUrl(blobUrl);
         setStage("done");
@@ -200,7 +215,9 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
           }
 
           // Convert base64 → Blob → blob URL (supports seeking, no CORS, no disk)
-          const byteArray = Uint8Array.from(atob(resultData.videoBase64), c => c.charCodeAt(0));
+          const base64Str = resultData.videoBase64.replace(/\s/g, '');
+          const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
+          const byteArray = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
           const blob = new Blob([byteArray], { type: "video/mp4" });
           const blobUrl = URL.createObjectURL(blob);
 
