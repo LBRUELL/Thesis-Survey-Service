@@ -20,6 +20,7 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+console.log("GEMINI_API_KEY loaded:", GEMINI_API_KEY ? `${GEMINI_API_KEY.slice(0, 8)}...` : "MISSING");
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Feature Config ────────────────────────────────────────────────────────────
@@ -316,7 +317,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     // Call Gemini VEO 2 API (long-running operation)
     const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
