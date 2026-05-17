@@ -9,6 +9,16 @@ const fetch = require("node-fetch");
 
 const app = express();
 
+// --- CATCH-ALL REQUEST LOGGER ---
+// This will log EVERY request that hits the server, BEFORE any other routes.
+app.use((req, res, next) => {
+  console.log(`\n\n--- INCOMING REQUEST ---`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log("Request Headers:", JSON.stringify(req.headers, null, 2));
+  next();
+});
+
+
 // Add this near the top of server.js
 app.use((req, res, next) => {
   res.setHeader(
@@ -370,7 +380,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     // Call Gemini VEO 2 API (long-running operation)
     const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -586,55 +596,6 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Cleanup generated video file
-app.delete("/api/video-cleanup", async (req, res) => {
-  try {
-    const { videoPath } = req.body;
-    if (!videoPath) {
-      return res.status(400).json({ error: "videoPath is required" });
-    }
-
-    // Security: prevent path traversal. Normalize and ensure it's in the videos dir.
-    const baseName = path.basename(videoPath);
-    const fullPath = path.join(__dirname, "videos", baseName);
-
-    // Final check to ensure we're not deleting outside the 'videos' folder
-    if (path.dirname(fullPath) !== path.join(__dirname, "videos")) {
-        return res.status(403).json({ error: "Invalid path specified." });
-    }
-
-    await fs.unlink(fullPath);
-    res.json({ success: true, message: "Video deleted." });
-  } catch (err) {
-    // It's okay if the file is already gone (e.g., cleaned by sweeper)
-    if (err.code === 'ENOENT') {
-        return res.status(200).json({ success: true, message: "File not found, presumed already deleted." });
-    }
-    console.error("Video cleanup error:", err);
-    res.status(500).json({ error: "Failed to delete video file." });
-  }
-});
-
-// Sweep videos older than 1 hour (safety net for any that slipped through)
-async function sweepOldVideos() {
-  try {
-    const videosDir = path.join(__dirname, "videos");
-    const files = await fs.readdir(videosDir);
-    const cutoff = Date.now() - 60 * 60 * 1000; // 1 hour
-    for (const file of files) {
-      const filePath = path.join(videosDir, file);
-      const stat = await fs.stat(filePath).catch(() => null);
-      if (stat && stat.mtimeMs < cutoff) {
-        await fs.unlink(filePath).catch(() => {});
-      }
-    }
-  } catch {}
-}
-
-// Run sweep every 15 minutes
-setInterval(sweepOldVideos, 15 * 60 * 1000);
-
 
 app.get("/api/health", (req, res) => {
   res.json({

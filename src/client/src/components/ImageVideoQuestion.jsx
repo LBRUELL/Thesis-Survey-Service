@@ -28,7 +28,6 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
   const pollTimerRef = useRef(null);
   const dragRef = useRef(null);
   const maxWatchedRef = useRef(0);
-  const originalVideoPathRef = useRef(null);
 
   useEffect(() => {
     const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
@@ -63,22 +62,6 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       onVideoComplete?.();
     }
   }, [onVideoComplete]);
-
-  const handleCanPlay = useCallback(() => {
-    if (originalVideoPathRef.current) {
-      // In dev mode, we don't have a server file to clean up
-      const isDevMode = new URLSearchParams(window.location.search).get('dev') === 'true';
-      if (isDevMode) return;
-      
-      // Delete server file now that the browser can start streaming
-      fetch(apiUrl("/api/video-cleanup"), {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoPath: originalVideoPathRef.current }),
-      }).catch(() => {});
-      originalVideoPathRef.current = null; // Ensure cleanup only runs once
-    }
-  }, []);
 
   // ── File handling ────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file) => {
@@ -185,7 +168,11 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
           const videoFilename = data.videoUrl.split('/').pop();
           const streamUrl = apiUrl(`/api/stream-video/${videoFilename}`);
-          originalVideoPathRef.current = data.videoUrl; // Store the path for cleanup
+          
+          console.log("!!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!!!");
+          console.log("Received videoUrl from backend:", data.videoUrl);
+          console.log("Constructed streaming URL for <video> tag:", streamUrl);
+          console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
           setVideoUrl(streamUrl);
           setStage("done");
@@ -334,7 +321,6 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={handleEnded}
                   onSeeked={handleSeeked}
-                  onCanPlay={handleCanPlay}
               >
                 <source src={videoUrl} type="video/mp4" />
                 Your browser does not support the video tag.
