@@ -396,6 +396,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             ],
             parameters: {
               durationSeconds: 4,
+              includeAudio: false,
             },
           }),
         }
