@@ -183,16 +183,17 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         if (data.status === "complete") {
           setProgress({ label: "Video ready!", pct: 100 });
 
-          const directVideoUrl = apiUrl(data.videoUrl);
+          const videoFilename = data.videoUrl.split('/').pop();
+          const streamUrl = apiUrl(`/api/stream-video/${videoFilename}`);
           originalVideoPathRef.current = data.videoUrl; // Store the path for cleanup
 
-          setVideoUrl(directVideoUrl);
+          setVideoUrl(streamUrl);
           setStage("done");
           setProgress(null);
           setWatchPct(0);
           setVideoEnded(false);
           maxWatchedRef.current = 0;
-          onChange({ imagePath: currentPreview, videoUrl: directVideoUrl });
+          onChange({ imagePath: currentPreview, videoUrl: streamUrl });
 
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");

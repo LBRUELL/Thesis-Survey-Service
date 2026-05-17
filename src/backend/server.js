@@ -37,7 +37,7 @@ app.use(express.json({ limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // --- Custom Video Streaming Handler ---
-app.get('/videos/:videoName', async (req, res) => {
+app.get('/api/stream-video/:videoName', async (req, res) => {
   const videoName = req.params.videoName;
   // Security: Ensure `videoName` does not contain path traversal characters
   if (videoName.includes('..') || videoName.includes('/')) {
