@@ -63,6 +63,16 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
   // ── File handling ────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file) => {
+    const isDevMode = new URLSearchParams(window.location.search).get('dev') === 'true';
+    if (isDevMode) {
+      const localUrl = URL.createObjectURL(file);
+      setPreview(localUrl);
+      setStage("done");
+      setVideoUrl("/mock-video.mp4");
+      onChange({ imagePath: localUrl, videoUrl: "/mock-video.mp4" });
+      return;
+    }
+    
     if (!file || !file.type.startsWith("image/")) {
       setError("Please upload an image file (JPEG, PNG, WebP, etc.)");
       return;
