@@ -310,23 +310,36 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 });
 
 // Test endpoint — mimics get-video-result but uses a free public video
+const TEST_OPERATION = "test-operation";
+
 app.get("/api/test-video-result", async (req, res) => {
-  try {
-    const TEST_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4";
-    console.log("[TEST] Fetching test video...");
-    const videoDownload = await fetch(TEST_VIDEO_URL);
-    if (!videoDownload.ok) throw new Error(`Failed to fetch test video: ${videoDownload.status}`);
-    const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
-    console.log(`[TEST] Downloaded ${videoBuffer.length} bytes, converting to base64...`);
-    res.json({
-      status: "complete",
-      videoBase64: videoBuffer.toString("base64"),
-    });
-    console.log("[TEST] Response sent successfully.");
-  } catch (err) {
-    console.error("[TEST] Error:", err);
-    res.status(500).json({ error: err.message });
+  const cached = videoCache.get(TEST_OPERATION);
+
+  if (!cached) {
+    // First call — kick off background download and return 202
+    videoCache.set(TEST_OPERATION, "downloading");
+    (async () => {
+      try {
+        console.log("[TEST] Simulating background download (15s delay)...");
+        await new Promise(r => setTimeout(r, 15000));
+        const dl = await fetch("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4");
+        const buf = Buffer.from(await dl.arrayBuffer());
+        videoCache.set(TEST_OPERATION, buf.toString("base64"));
+        console.log(`[TEST] Ready: ${buf.length} bytes`);
+        setTimeout(() => videoCache.delete(TEST_OPERATION), 10 * 60 * 1000);
+      } catch (err) {
+        console.error("[TEST] Background download failed:", err);
+        videoCache.delete(TEST_OPERATION);
+      }
+    })();
+    return res.status(202).json({ status: "preparing" });
   }
+
+  if (cached === "downloading") {
+    return res.status(202).json({ status: "preparing" });
+  }
+
+  res.json({ status: "complete", videoBase64: cached });
 });
 
 // This endpoint ONLY checks the status. It does not download the video.
