@@ -158,23 +158,30 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
 
         if (data.status === "complete") {
-          // SUCCESS: The video is already here in 'data.videoBase64'
           setProgress({ label: "Video ready!", pct: 100 });
 
-          // Use the Base64 string directly as the video source
-          const finalVideoUrl = data.videoBase64;
+          try {
+            // 1. Use the browser's built-in fetch to convert the Data URI to a Blob
+            // This is more memory-efficient than manual base64 decoding
+            const response = await fetch(data.videoBase64);
+            const videoBlob = await response.blob();
 
-          setVideoUrl(finalVideoUrl);
-          setStage("done");
-          setWatchPct(0);
-          setVideoEnded(false);
-          maxWatchedRef.current = 0;
+            // 2. Create a clean, temporary local URL
+            const blobUrl = URL.createObjectURL(videoBlob);
 
-          // Notify the survey parent component
-          onChange({ imagePath: currentPreview, videoUrl: finalVideoUrl });
+            // 3. Update the state
+            setVideoUrl(blobUrl);
+            setStage("done");
+            setWatchPct(0);
+            setVideoEnded(false);
 
-          // CLEANUP: We don't need to call /api/video-cleanup anymore!
-          // The video exists only in the participant's browser RAM now.
+            // 4. Important: Pass the Blob URL to the parent component
+            onChange({ imagePath: currentPreview, videoUrl: blobUrl });
+
+          } catch (blobError) {
+            console.error("Error creating video blob:", blobError);
+            setError("Failed to process video data.");
+          }
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
         } else if (pollCountRef.current >= MAX_POLLS) {
