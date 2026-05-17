@@ -152,28 +152,26 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
 
         if (data.status === "complete") {
-          setProgress({ label: "Loading your video…", pct: 95 });
+          setProgress({ label: "Video ready!", pct: 100 });
 
-          // Fetch the video file from the backend using apiUrl —
-          // it lives on the backend Railway service, not the frontend
-          const videoBlobRes = await fetch(apiUrl(data.videoUrl));
-          const blob = await videoBlobRes.blob();
-          const blobUrl = URL.createObjectURL(blob);
+          const directVideoUrl = apiUrl(data.videoUrl);
 
-          // Ask server to delete the temporary file now that we have it in memory
-          fetch(apiUrl("/api/video-cleanup"), {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ videoPath: data.videoUrl }),
-          }).catch(() => {});
+          // Delete server file after a short delay so the browser can start streaming
+          setTimeout(() => {
+            fetch(apiUrl("/api/video-cleanup"), {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ videoPath: data.videoUrl }),
+            }).catch(() => {});
+          }, 5000);
 
-          setVideoUrl(blobUrl);
+          setVideoUrl(directVideoUrl);
           setStage("done");
           setProgress(null);
           setWatchPct(0);
           setVideoEnded(false);
           maxWatchedRef.current = 0;
-          onChange({ imagePath: currentPreview, videoUrl: blobUrl });
+          onChange({ imagePath: currentPreview, videoUrl: directVideoUrl });
 
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
