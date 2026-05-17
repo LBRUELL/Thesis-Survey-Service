@@ -380,7 +380,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     // Call Gemini VEO 2 API (long-running operation)
     const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
