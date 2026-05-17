@@ -41,31 +41,6 @@ app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- Buffered Video Sending Handler ---
-app.get('/api/stream-video/:videoName', (req, res) => {
-  const videoName = req.params.videoName;
-
-  if (videoName.includes('..') || videoName.includes('/')) {
-    return res.status(400).send('Invalid video name');
-  }
-
-  const videoPath = path.join(DATA_DIR, 'videos', videoName);
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-  res.sendFile(videoPath, (err) => {
-    if (!err) return;
-    if (err.code === 'ENOENT') {
-      res.status(404).send('Video not found');
-    } else {
-      console.error('[VIDEO HANDLER] Error:', err);
-      res.status(500).send('Error sending video');
-    }
-  });
-});
-
-
 // Serve built React client in production
 const CLIENT_BUILD = path.join(__dirname, "../client/dist");
 if (fsSync.existsSync(CLIENT_BUILD)) {
@@ -367,9 +342,8 @@ app.get("/api/get-video-result", async (req, res) => {
     if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
     const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
-    if (!pollRes.ok) {
-      return res.status(502).json({ error: "Final poll error" });
-    }
+    if (!pollRes.ok) return res.status(502).json({ error: "Final poll error" });
+
     const data = await pollRes.json();
     if (!data.done || data.error) {
       return res.status(404).json({ error: "Video not ready or failed", details: data.error });
@@ -377,30 +351,23 @@ app.get("/api/get-video-result", async (req, res) => {
 
     const samples = data.response?.generateVideoResponse?.generatedSamples || [];
     const videoUri = samples[0]?.video?.uri;
-
     if (!videoUri) {
-      console.error("No video URI in VEO response:", JSON.stringify(data.response, null, 2));
-      return res.json({ status: "error", error: "No video URI found in Google's response" });
+      return res.status(502).json({ error: "No video URI found in Google's response" });
     }
 
-    const videoFilename = `${uuidv4()}.mp4`;
-    const videoPath = path.join(DATA_DIR, "videos", videoFilename);
-
+    // Download the video and send as base64 — no disk write needed
     const videoDownload = await fetch(videoUri);
     const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
-    await fs.writeFile(videoPath, videoBuffer);
 
-    // Return the virtual path that the client will use.
     res.json({
       status: "complete",
-      videoUrl: `/videos/${videoFilename}`, 
+      videoBase64: videoBuffer.toString("base64"),
     });
   } catch (err) {
     console.error("Get video result error:", err);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // ─── Gemini Image Generation ──────────────────────────────────────────────────
 app.post("/api/generate-image", upload.single("image"), async (req, res) => {

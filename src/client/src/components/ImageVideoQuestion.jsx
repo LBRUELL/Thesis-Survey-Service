@@ -164,32 +164,30 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
 
         if (data.status === "complete") {
-          // Stop polling and fetch the final result
           clearTimeout(pollTimerRef.current);
           setProgress({ label: "Downloading video...", pct: 95 });
 
-          const resultRes = await fetch(`${apiUrl("/api/get-video-result")}?operationName=${encodeURIComponent(operationName)}`);
+          const resultRes = await fetch(
+              `${apiUrl("/api/get-video-result")}?operationName=${encodeURIComponent(operationName)}`
+          );
           const resultData = await resultRes.json();
 
           if (!resultRes.ok) {
             throw new Error(resultData.error || "Failed to get final video.");
           }
 
-          const videoFilename = resultData.videoUrl.split('/').pop();
-          const streamUrl = apiUrl(`/api/stream-video/${videoFilename}`);
-          
-          console.log("!!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!!!");
-          console.log("Received videoUrl from backend:", resultData.videoUrl);
-          console.log("Constructed streaming URL for <video> tag:", streamUrl);
-          console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+          // Convert base64 → Blob → blob URL (supports seeking, no CORS, no disk)
+          const byteArray = Uint8Array.from(atob(resultData.videoBase64), c => c.charCodeAt(0));
+          const blob = new Blob([byteArray], { type: "video/mp4" });
+          const blobUrl = URL.createObjectURL(blob);
 
-          setVideoUrl(streamUrl);
+          setVideoUrl(blobUrl);
           setStage("done");
           setProgress(null);
           setWatchPct(0);
           setVideoEnded(false);
           maxWatchedRef.current = 0;
-          onChange({ imagePath: currentPreview, videoUrl: streamUrl });
+          onChange({ imagePath: currentPreview, videoUrl: blobUrl });
 
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
@@ -222,6 +220,9 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
   const reset = () => {
     clearTimeout(pollTimerRef.current);
+    if (videoUrl && videoUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(videoUrl);
+    }
     setStage("idle");
     setShowCamera(false);
     setPreview(null);
