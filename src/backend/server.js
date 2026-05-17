@@ -8,6 +8,16 @@ const path = require("path");
 const fetch = require("node-fetch");
 
 const app = express();
+
+// Add this near the top of server.js
+app.use((req, res, next) => {
+  res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:;"
+  );
+  next();
+});
+
 const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
@@ -349,51 +359,37 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
 app.get("/api/video-status", async (req, res) => {
   try {
-    if (!GEMINI_API_KEY) {
-      return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
-    }
-
     const { operationName } = req.query;
-    if (!operationName) return res.status(400).json({ error: "operationName is required" });
-
     const pollRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
     );
-
-    if (!pollRes.ok) {
-      const errBody = await pollRes.json().catch(() => ({}));
-      return res.status(502).json({ error: "Poll error", details: errBody });
-    }
-
     const data = await pollRes.json();
 
     if (!data.done) return res.json({ status: "processing" });
     if (data.error) return res.json({ status: "error", error: data.error.message });
 
-    const samples = data.response?.generateVideoResponse?.generatedSamples || [];
-    if (!samples.length) return res.json({ status: "error", error: "No video generated" });
+    // Correct Veo 3.1 nesting: .response.generateVideoResponse.generatedSamples[0].video.uri
+    const videoUri = data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
-    const videoUri = samples[0]?.video?.uri;
-    if (!videoUri) return res.json({ status: "error", error: "No video URI in response" });
+    if (!videoUri) throw new Error("No video URI found in Google's response");
 
-    // --- THE CHANGE IS HERE ---
-    // Instead of saving to a file, we download the video into a Buffer
+    // Fetch the actual video bytes from Google
     const videoDownload = await fetch(videoUri);
-    const arrayBuffer = await videoDownload.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await videoDownload.arrayBuffer());
 
-    // Convert the buffer directly to a Base64 string
+    // Convert to Base64
     const base64Video = buffer.toString("base64");
+
+    // Log the size to Railway logs for debugging
+    console.log(`Video Ready! Size: ${(buffer.length / 1024).toFixed(2)} KB`);
 
     res.json({
       status: "complete",
-      // Send the video data directly back to the browser
       videoBase64: `data:video/mp4;base64,${base64Video}`
     });
-
   } catch (err) {
-    console.error("Video status error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Video Error:", err);
+    res.status(500).json({ status: "error", error: err.message });
   }
 });
 

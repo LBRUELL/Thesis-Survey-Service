@@ -305,17 +305,21 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
             </button>
           </div>
 
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            className={styles.video}
-            controls
-            autoPlay
-            playsInline
-            onTimeUpdate={handleTimeUpdate}
-            onEnded={handleEnded}
-            onSeeked={handleSeeked}
-          />
+          {videoUrl && (
+              <video
+                  key={videoUrl}  // <--- ADD THIS LINE
+                  width="100%"
+                  controls
+                  onTimeUpdate={(e) => {
+                    const pct = (e.target.currentTime / e.target.duration) * 100;
+                    setWatchPct(pct);
+                  }}
+                  onEnded={() => setVideoEnded(true)}
+              >
+                <source src={videoUrl} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+          )}
 
           {/* Watch progress bar */}
           <div className={styles.watchBar}>
