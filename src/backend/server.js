@@ -42,41 +42,27 @@ app.use(express.json({ limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // --- Buffered Video Sending Handler ---
-app.get('/api/stream-video/:videoName', async (req, res) => {
-  console.log(`[VIDEO HANDLER] Entered handler for /api/stream-video/:videoName`);
+app.get('/api/stream-video/:videoName', (req, res) => {
   const videoName = req.params.videoName;
-  console.log(`[VIDEO HANDLER] Request for video: ${videoName}`);
 
   if (videoName.includes('..') || videoName.includes('/')) {
-    console.error(`[VIDEO HANDLER] Invalid video name: ${videoName}`);
     return res.status(400).send('Invalid video name');
   }
-  
+
   const videoPath = path.join(DATA_DIR, 'videos', videoName);
-  console.log(`[VIDEO HANDLER] Full path to video: ${videoPath}`);
 
-  try {
-    console.log(`[VIDEO HANDLER] Reading file into buffer...`);
-    const videoBuffer = await fs.readFile(videoPath);
-    console.log(`[VIDEO HANDLER] File read successfully. Size: ${videoBuffer.length} bytes.`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Length', videoBuffer.length);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    
-    console.log(`[VIDEO HANDLER] Sending buffer to client.`);
-    res.send(videoBuffer);
-
-  } catch (err) {
+  res.sendFile(videoPath, (err) => {
+    if (!err) return;
     if (err.code === 'ENOENT') {
-      console.error(`[VIDEO HANDLER] File not found at ${videoPath}`);
       res.status(404).send('Video not found');
     } else {
-      console.error("[VIDEO HANDLER] Video sending error:", err);
+      console.error('[VIDEO HANDLER] Error:', err);
       res.status(500).send('Error sending video');
     }
-  }
+  });
 });
 
 
