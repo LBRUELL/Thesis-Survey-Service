@@ -306,26 +306,19 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     // Call Gemini VEO 2 API (long-running operation)
     const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:generateVideos?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            instances: [
-              {
-                prompt,
-                image: {
-                  bytesBase64Encoded: base64Image,
-                  mimeType,
-                },
-              },
-            ],
-            parameters: {
-              aspectRatio: "1:1", // Fewer pixels to generate
-              sampleCount: 1,
-              durationSeconds: 3, // Shorter duration is cheaper
-              fps: 24, // Standard cinematic frame rate uses less data than 30 or 60 fps
-              targetResolution: "720p",
+            prompt: prompt,
+            image: {
+              bytesBase64Encoded: base64Image,
+              mimeType: mimeType,
+            },
+            config: {
+              aspectRatio: "1:1", // Generates fewer pixels, reducing costs
+              resolution: "720p",
             },
           }),
         }
