@@ -151,36 +151,38 @@ export default function ImageVideoQuestion({ videoPrompt, value, onChange, onVid
 
       try {
         const res = await fetch(
-          `${apiUrl("/api/video-status")}?operationName=${encodeURIComponent(operationName)}`
+            `${apiUrl("/api/video-status")}?operationName=${encodeURIComponent(operationName)}`
         );
         const data = await res.json();
 
         if (data.status === "complete") {
-          // 1. Success! The video is already here in 'data.videoBase64'
+          // SUCCESS: The video is already here in 'data.videoBase64'
           setProgress({ label: "Video ready!", pct: 100 });
 
+          // Use the Base64 string directly as the video source
           const finalVideoUrl = data.videoBase64;
 
-          // 2. Update the local state
           setVideoUrl(finalVideoUrl);
           setStage("done");
           setWatchPct(0);
           setVideoEnded(false);
           maxWatchedRef.current = 0;
 
-          // 3. Notify the survey parent component
+          // Notify the survey parent component
           onChange({ imagePath: currentPreview, videoUrl: finalVideoUrl });
 
-          // NOTE: We no longer need to fetch a blob or call /api/video-cleanup
-          // because the server never saved a file to the disk.
+          // CLEANUP: We don't need to call /api/video-cleanup anymore!
+          // The video exists only in the participant's browser RAM now.
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
         } else if (pollCountRef.current >= MAX_POLLS) {
           throw new Error("Video generation timed out. Please try again.");
         } else {
+          // Continue polling
           pollVideo(operationName, currentPreview);
         }
       } catch (err) {
+        console.error("Polling error:", err);
         setError(err.message);
         setStage("idle");
         setProgress(null);
