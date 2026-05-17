@@ -306,7 +306,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     // Call Gemini VEO 2 API (long-running operation)
     const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -321,8 +321,8 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
               },
             ],
             parameters: {
-              aspectRatio: "1:1", // The key cost-saving setting
-              // targetResolution: "720p", // Optional: check model support for specific tiers
+              resolution: "720p",
+              durationSeconds: "4",
             },
           }),
         }
