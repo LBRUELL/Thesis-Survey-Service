@@ -13,7 +13,7 @@ const app = express();
 app.use((req, res, next) => {
   res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:;"
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src * data: blob:;"
   );
   next();
 });
@@ -534,6 +534,35 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
   } catch (err) {
     console.error("Generate image error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Cleanup generated video file
+app.delete("/api/video-cleanup", async (req, res) => {
+  try {
+    const { videoPath } = req.body;
+    if (!videoPath) {
+      return res.status(400).json({ error: "videoPath is required" });
+    }
+
+    // Security: prevent path traversal. Normalize and ensure it's in the videos dir.
+    const baseName = path.basename(videoPath);
+    const fullPath = path.join(__dirname, "videos", baseName);
+
+    // Final check to ensure we're not deleting outside the 'videos' folder
+    if (path.dirname(fullPath) !== path.join(__dirname, "videos")) {
+        return res.status(403).json({ error: "Invalid path specified." });
+    }
+
+    await fs.unlink(fullPath);
+    res.json({ success: true, message: "Video deleted." });
+  } catch (err) {
+    // It's okay if the file is already gone (e.g., cleaned by sweeper)
+    if (err.code === 'ENOENT') {
+        return res.status(200).json({ success: true, message: "File not found, presumed already deleted." });
+    }
+    console.error("Video cleanup error:", err);
+    res.status(500).json({ error: "Failed to delete video file." });
   }
 });
 
