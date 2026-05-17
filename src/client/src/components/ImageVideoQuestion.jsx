@@ -6,6 +6,8 @@ import styles from "./ImageVideoQuestion.module.css";
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 60; // 3 minutes max
+const MOCK_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4";
+
 
 export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onChange, onVideoComplete }) {
   const [stage, setStage] = useState(
@@ -68,8 +70,8 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       const localUrl = URL.createObjectURL(file);
       setPreview(localUrl);
       setStage("done");
-      setVideoUrl("/mock-video.mp4");
-      onChange({ imagePath: localUrl, videoUrl: "/mock-video.mp4" });
+      setVideoUrl(MOCK_VIDEO_URL);
+      onChange({ imagePath: localUrl, videoUrl: MOCK_VIDEO_URL });
       return;
     }
     
