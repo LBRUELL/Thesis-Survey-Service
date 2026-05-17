@@ -311,14 +311,18 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: prompt,
-            image: {
-              bytesBase64Encoded: base64Image,
-              mimeType: mimeType,
-            },
-            config: {
-              aspectRatio: "1:1", // Generates fewer pixels, reducing costs
-              resolution: "720p",
+            instances: [
+              {
+                prompt: prompt,
+                image: {
+                  bytesBase64Encoded: base64Image,
+                  mimeType: mimeType,
+                },
+              },
+            ],
+            parameters: {
+              aspectRatio: "1:1", // The key cost-saving setting
+              // targetResolution: "720p", // Optional: check model support for specific tiers
             },
           }),
         }
