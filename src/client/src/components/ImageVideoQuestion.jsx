@@ -69,9 +69,27 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
     if (isDevMode) {
       const localUrl = URL.createObjectURL(file);
       setPreview(localUrl);
-      setStage("done");
-      setVideoUrl(MOCK_VIDEO_URL);
-      onChange({ imagePath: localUrl, videoUrl: MOCK_VIDEO_URL });
+      setStage("generating");
+      setProgress({ label: "Fetching test video...", pct: 80 });
+
+      try {
+        const res = await fetch(apiUrl("/api/test-video-result"));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Test fetch failed");
+
+        const bytes = Uint8Array.from(atob(data.videoBase64), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "video/mp4" });
+        const blobUrl = URL.createObjectURL(blob);
+
+        setVideoUrl(blobUrl);
+        setStage("done");
+        setProgress(null);
+        onChange({ imagePath: localUrl, videoUrl: blobUrl });
+      } catch (err) {
+        setError(err.message);
+        setStage("idle");
+        setProgress(null);
+      }
       return;
     }
     

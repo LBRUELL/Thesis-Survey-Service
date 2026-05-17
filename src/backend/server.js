@@ -309,6 +309,26 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
+// Test endpoint — mimics get-video-result but uses a free public video
+app.get("/api/test-video-result", async (req, res) => {
+  try {
+    const TEST_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4";
+    console.log("[TEST] Fetching test video...");
+    const videoDownload = await fetch(TEST_VIDEO_URL);
+    if (!videoDownload.ok) throw new Error(`Failed to fetch test video: ${videoDownload.status}`);
+    const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
+    console.log(`[TEST] Downloaded ${videoBuffer.length} bytes, converting to base64...`);
+    res.json({
+      status: "complete",
+      videoBase64: videoBuffer.toString("base64"),
+    });
+    console.log("[TEST] Response sent successfully.");
+  } catch (err) {
+    console.error("[TEST] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // This endpoint ONLY checks the status. It does not download the video.
 app.get("/api/video-status", async (req, res) => {
   try {
