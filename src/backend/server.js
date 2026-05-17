@@ -36,23 +36,58 @@ app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- DETAILED LOGGING FOR VIDEO SERVING ---
-const videoStaticMiddleware = express.static(path.join(__dirname, "videos"));
-app.use("/videos", (req, res, next) => {
-  console.log(`\n--- VIDEO REQUEST START ---`);
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log("Request Headers:", JSON.stringify(req.headers, null, 2));
+// --- Custom Video Streaming Handler ---
+app.get('/videos/:videoName', async (req, res) => {
+  const videoName = req.params.videoName;
+  // Security: Ensure `videoName` does not contain path traversal characters
+  if (videoName.includes('..') || videoName.includes('/')) {
+    return res.status(400).send('Invalid video name');
+  }
+  
+  const videoPath = path.join(__dirname, 'videos', videoName);
 
-  res.on('finish', () => {
-    console.log(`Response Status: ${res.statusCode}`);
-    console.log("Response Headers:", JSON.stringify(res.getHeaders(), null, 2));
-    console.log(`--- VIDEO REQUEST END ---\n`);
-  });
-  
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  
-  videoStaticMiddleware(req, res, next);
+  try {
+    const stat = await fs.stat(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      
+      const file = fsSync.createReadStream(videoPath, {start, end});
+      
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/mp4',
+      };
+      
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/mp4',
+      };
+      res.writeHead(200, head);
+      fsSync.createReadStream(videoPath).pipe(res);
+    }
+  } catch (err) {
+    // If file doesn't exist, or other error
+    if (err.code === 'ENOENT') {
+      res.status(404).send('Video not found');
+    } else {
+      console.error("Video streaming error:", err);
+      res.status(500).send('Error streaming video');
+    }
+  }
 });
 
 // Serve built React client in production
