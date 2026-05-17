@@ -310,6 +310,9 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
+const SIMULATED_DELAY_MS = 3 * 60 * 1000; // 3 minutes, matching worst-case VEO timing
+const TEST_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4";
+
 // Test endpoint — mimics get-video-result but uses a free public video
 const TEST_OPERATION = "test-operation";
 
@@ -322,9 +325,9 @@ app.get("/api/test-video-result", (req, res) => {
     videoCache.set("test-operation", "downloading");
     (async () => {
       try {
-        console.log("[TEST] Simulating background download (15s delay)...");
-        await new Promise(r => setTimeout(r, 15000));
-        const dl = await fetch("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4");
+        console.log(`[TEST] Simulating background download (${SIMULATED_DELAY_MS}ms delay)...`);
+        await new Promise(r => setTimeout(r, SIMULATED_DELAY_MS));
+        const dl = await fetch(TEST_VIDEO_URL);
         const buf = Buffer.from(await dl.arrayBuffer());
         videoCache.set("test-operation", buf.toString("base64"));
         console.log(`[TEST] Ready: ${buf.length} bytes`);
