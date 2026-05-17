@@ -360,42 +360,39 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 app.get("/api/video-status", async (req, res) => {
   try {
     const { operationName } = req.query;
-    const pollRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
-    );
+    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
     const data = await pollRes.json();
 
     if (!data.done) return res.json({ status: "processing" });
+
+    // --- NEW DEBUG LOGGING ---
+    console.log("FULL GOOGLE RESPONSE:", JSON.stringify(data, null, 2));
+    // -------------------------
+
     if (data.error) return res.json({ status: "error", error: data.error.message });
 
-    // Correct Veo 3.1 nesting: .response.generateVideoResponse.generatedSamples[0].video.uri
-    const videoUri = data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+    // VEO 3.1 can use different paths. Let's try to find the URI anywhere it might be:
+    const videoUri =
+        data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
+        data.response?.generatedVideos?.[0]?.video?.uri ||
+        data.response?.videos?.[0]?.uri;
 
-    if (!videoUri) throw new Error("No video URI found in Google's response");
-
-    // Fetch the actual video bytes from Google
-    const videoDownload = await fetch(videoUri);
-
-// CHECK: If the response is NOT a video (e.g., it's a JSON error), throw an error
-    const contentType = videoDownload.headers.get("content-type");
-    if (!contentType || !contentType.includes("video")) {
-      const errorText = await videoDownload.text();
-      console.error("Google returned an error instead of a video:", errorText);
-      throw new Error("API Permission Error: Ensure Gemini API is enabled in Google Cloud.");
+    if (!videoUri) {
+      // Check if there were safety blocks
+      const safetyResult = data.response?.generateVideoResponse?.safetyRatings;
+      const safetyMsg = safetyResult ? " (Likely a safety filter block)" : "";
+      throw new Error("No video URI found in Google's response" + safetyMsg);
     }
 
+    const videoDownload = await fetch(videoUri);
     const buffer = Buffer.from(await videoDownload.arrayBuffer());
-    const base64Video = buffer.toString("base64");
-
-    // Log the size to Railway logs for debugging
-    console.log(`Video Ready! Size: ${(buffer.length / 1024).toFixed(2)} KB`);
-
     res.json({
       status: "complete",
-      videoBase64: `data:video/mp4;base64,${base64Video}`
+      videoBase64: `data:video/mp4;base64,${buffer.toString("base64")}`
     });
+
   } catch (err) {
-    console.error("Video Error:", err);
+    console.error("Video Status Error:", err);
     res.status(500).json({ status: "error", error: err.message });
   }
 });
