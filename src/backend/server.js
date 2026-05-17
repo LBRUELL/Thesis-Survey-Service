@@ -322,7 +322,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             ],
             parameters: {
               resolution: "720p",
-              durationSeconds: "4",
+              durationSeconds: 4,
             },
           }),
         }
