@@ -6,6 +6,7 @@ const fs = require("fs").promises;
 const fsSync = require("fs");
 const path = require("path");
 const fetch = require("node-fetch");
+const videoCache = new Map(); // shared across all video routes
 
 const app = express();
 
@@ -312,24 +313,25 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 // Test endpoint — mimics get-video-result but uses a free public video
 const TEST_OPERATION = "test-operation";
 
-app.get("/api/test-video-result", async (req, res) => {
-  const cached = videoCache.get(TEST_OPERATION);
+app.get("/api/test-video-result", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const cached = videoCache.get("test-operation");
 
   if (!cached) {
-    // First call — kick off background download and return 202
-    videoCache.set(TEST_OPERATION, "downloading");
+    videoCache.set("test-operation", "downloading");
     (async () => {
       try {
         console.log("[TEST] Simulating background download (15s delay)...");
         await new Promise(r => setTimeout(r, 15000));
         const dl = await fetch("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4");
         const buf = Buffer.from(await dl.arrayBuffer());
-        videoCache.set(TEST_OPERATION, buf.toString("base64"));
+        videoCache.set("test-operation", buf.toString("base64"));
         console.log(`[TEST] Ready: ${buf.length} bytes`);
-        setTimeout(() => videoCache.delete(TEST_OPERATION), 10 * 60 * 1000);
+        setTimeout(() => videoCache.delete("test-operation"), 10 * 60 * 1000);
       } catch (err) {
         console.error("[TEST] Background download failed:", err);
-        videoCache.delete(TEST_OPERATION);
+        videoCache.delete("test-operation");
       }
     })();
     return res.status(202).json({ status: "preparing" });
