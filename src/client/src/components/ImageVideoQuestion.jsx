@@ -74,26 +74,26 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
       try {
         const res = await fetch(apiUrl("/api/test-video-result"));
+        if (res.status === 202) {
+             // Let's poll for the test video just like we do for the real video if it's preparing
+             pollVideo("test-operation", localUrl, true);
+             return;
+        }
+
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Test fetch failed");
 
-        // The test endpoint might be sending base64 containing whitespace or invalid chars
-        // Or if it's returning a URL instead of base64
         let blobUrl;
         if (data.videoBase64) {
              const base64Str = data.videoBase64.replace(/\s/g, ''); // remove any whitespace
-             
-             // The string length must be a multiple of 4.
-             // If not, it means the base64 string is missing padding characters.
              const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
-
              const bytes = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
              const blob = new Blob([bytes], { type: "video/mp4" });
              blobUrl = URL.createObjectURL(blob);
         } else if (data.videoUrl) {
              blobUrl = data.videoUrl;
         } else {
-             throw new Error("No video data found in response");
+             throw new Error(`No video data found in response. Response was: ${JSON.stringify(data)}`);
         }
 
         setVideoUrl(blobUrl);
@@ -175,7 +175,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       setQuota((q) => q ? { ...q, used: q.used + 1 } : q);
 
       pollCountRef.current = 0;
-      pollVideo(data.operationName, localUrl);
+      pollVideo(data.operationName, localUrl, false);
     } catch (err) {
       setError(err.message);
       setStage("idle");
@@ -183,14 +183,45 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
     }
   }, [videoPrompt, onChange]);
 
-  const pollVideo = useCallback((operationName, currentPreview) => {
+  const pollVideo = useCallback((operationName, currentPreview, isTest = false) => {
     clearTimeout(pollTimerRef.current);
     pollTimerRef.current = setTimeout(async () => {
       pollCountRef.current++;
       const pct = Math.min(55 + pollCountRef.current * 1.5, 90);
-      setProgress({ label: "AI is creating your video…", pct });
+      setProgress({ label: isTest ? "Simulating AI delay..." : "AI is creating your video…", pct });
 
       try {
+        if (isTest) {
+             const resultRes = await fetch(apiUrl("/api/test-video-result"));
+             if (resultRes.status === 202) {
+                  return pollVideo(operationName, currentPreview, true);
+             }
+             
+             const resultData = await resultRes.json();
+             if (!resultRes.ok) throw new Error(resultData.error || "Test fetch failed");
+             
+             let blobUrl;
+             if (resultData.videoBase64) {
+                  const base64Str = resultData.videoBase64.replace(/\s/g, '');
+                  const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
+                  const byteArray = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
+                  const blob = new Blob([byteArray], { type: "video/mp4" });
+                  blobUrl = URL.createObjectURL(blob);
+             } else {
+                  throw new Error(`No video data found in response. Response was: ${JSON.stringify(resultData)}`);
+             }
+             
+             setVideoUrl(blobUrl);
+             setStage("done");
+             setProgress(null);
+             setWatchPct(0);
+             setVideoEnded(false);
+             maxWatchedRef.current = 0;
+             onChange({ imagePath: currentPreview, videoUrl: blobUrl });
+             return;
+        }
+
+
         const res = await fetch(
             `${apiUrl("/api/video-status")}?operationName=${encodeURIComponent(operationName)}`
         );
@@ -207,11 +238,15 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
           if (resultRes.status === 202) {
             await new Promise(r => setTimeout(r, 2000));
-            return pollVideo(operationName, currentPreview);
+            return pollVideo(operationName, currentPreview, false);
           }
 
           if (!resultRes.ok) {
             throw new Error(resultData.error || "Failed to get final video.");
+          }
+
+          if (!resultData.videoBase64 && !resultData.videoUrl) {
+            throw new Error(`No video data found in response. Response was: ${JSON.stringify(resultData)}`);
           }
 
           // Convert base64 → Blob → blob URL (supports seeking, no CORS, no disk)
@@ -234,7 +269,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         } else if (pollCountRef.current >= MAX_POLLS) {
           throw new Error("Video generation timed out. Please try again.");
         } else {
-          pollVideo(operationName, currentPreview);
+          pollVideo(operationName, currentPreview, false);
         }
       } catch (err) {
         console.error("Polling error:", err);
