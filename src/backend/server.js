@@ -375,9 +375,16 @@ app.get("/api/video-status", async (req, res) => {
 
     // Fetch the actual video bytes from Google
     const videoDownload = await fetch(videoUri);
-    const buffer = Buffer.from(await videoDownload.arrayBuffer());
 
-    // Convert to Base64
+// CHECK: If the response is NOT a video (e.g., it's a JSON error), throw an error
+    const contentType = videoDownload.headers.get("content-type");
+    if (!contentType || !contentType.includes("video")) {
+      const errorText = await videoDownload.text();
+      console.error("Google returned an error instead of a video:", errorText);
+      throw new Error("API Permission Error: Ensure Gemini API is enabled in Google Cloud.");
+    }
+
+    const buffer = Buffer.from(await videoDownload.arrayBuffer());
     const base64Video = buffer.toString("base64");
 
     // Log the size to Railway logs for debugging
