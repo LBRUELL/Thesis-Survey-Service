@@ -357,43 +357,84 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
+// Poll video generation status
 app.get("/api/video-status", async (req, res) => {
   try {
-    const { operationName } = req.query;
-    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
-    const data = await pollRes.json();
-
-    if (!data.done) return res.json({ status: "processing" });
-
-    // --- NEW DEBUG LOGGING ---
-    console.log("FULL GOOGLE RESPONSE:", JSON.stringify(data, null, 2));
-    // -------------------------
-
-    if (data.error) return res.json({ status: "error", error: data.error.message });
-
-    // VEO 3.1 can use different paths. Let's try to find the URI anywhere it might be:
-    const videoUri =
-        data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-        data.response?.generatedVideos?.[0]?.video?.uri ||
-        data.response?.videos?.[0]?.uri;
-
-    if (!videoUri) {
-      // Check if there were safety blocks
-      const safetyResult = data.response?.generateVideoResponse?.safetyRatings;
-      const safetyMsg = safetyResult ? " (Likely a safety filter block)" : "";
-      throw new Error("No video URI found in Google's response" + safetyMsg);
+    if (!GEMINI_API_KEY) {
+      return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
     }
 
+    const { operationName } = req.query;
+    if (!operationName)
+      return res.status(400).json({ error: "operationName is required" });
+
+    const pollRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`
+    );
+
+    if (!pollRes.ok) {
+      const errBody = await pollRes.json().catch(() => ({}));
+      return res.status(502).json({ error: "Poll error", details: errBody });
+    }
+
+    const data = await pollRes.json();
+
+    if (!data.done) {
+      return res.json({ status: "processing" });
+    }
+
+    if (data.error) {
+      return res.json({ status: "error", error: data.error.message });
+    }
+
+    // Log the full response so you can inspect the exact structure
+    console.log("VEO response:", JSON.stringify(data.response, null, 2));
+
+    // Try every known response path across VEO 2 and VEO 3
+    const samples =
+        data.response?.generateVideoResponse?.generatedSamples ||
+        data.response?.videos ||
+        data.response?.generatedSamples ||
+        [];
+
+    const videoUri =
+        samples[0]?.video?.uri ||
+        samples[0]?.uri ||
+        samples[0]?.videoUri ||
+        data.response?.generateVideoResponse?.videos?.[0]?.uri ||
+        data.response?.video?.uri ||
+        null;
+
+    if (!videoUri) {
+      // Log the raw response so you can see exactly what came back
+      console.error("Could not find video URI. Full response.response object:", JSON.stringify(data.response, null, 2));
+      const safetyMsg = data.response?.generateVideoResponse?.safetyRatings
+          ? " (Likely a safety filter block)"
+          : "";
+      return res.json({
+        status: "error",
+        error: "No video URI found in Google's response" + safetyMsg,
+        // Return raw structure to client so it's visible in browser console too
+        debug: data.response,
+      });
+    }
+
+    // Download and serve the video
+    const videoId = uuidv4();
+    const videoFilename = `${videoId}.mp4`;
+    const videoPath = path.join(__dirname, "videos", videoFilename);
+
     const videoDownload = await fetch(videoUri);
-    const buffer = Buffer.from(await videoDownload.arrayBuffer());
+    const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
+    await fs.writeFile(videoPath, videoBuffer);
+
     res.json({
       status: "complete",
-      videoBase64: `data:video/mp4;base64,${buffer.toString("base64")}`
+      videoUrl: `/videos/${videoFilename}`,
     });
-
   } catch (err) {
-    console.error("Video Status Error:", err);
-    res.status(500).json({ status: "error", error: err.message });
+    console.error("Video status error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
