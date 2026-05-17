@@ -166,6 +166,10 @@ export default function TakeSurvey() {
       setSubmitting(false);
     }
   };
+  
+  const isPageVideoPending = page.questions.some(
+    (q) => q.type === "image_video" && answers[q.id]?.videoUrl && !videoComplete[q.id]
+  );
 
   return (
     <div className={styles.page}>
@@ -259,18 +263,6 @@ export default function TakeSurvey() {
                         }}
                         onVideoComplete={() => markVideoComplete(q.id)}
                       />
-
-                      {answers[q.id]?.videoUrl && !videoComplete[q.id] && (
-                        <div
-                          ref={(el) => (videoWarningRefs.current[q.id] = el)}
-                          className={`${styles.videoGateWarning} ${shakeId === q.id ? styles.shake : ""}`}
-                        >
-                          <span className={styles.videoGateIcon}>▶</span>
-                          <span>
-                            You must watch the entire video before you can continue. Press play and let it finish — the "Next" button will unlock automatically.
-                          </span>
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -301,12 +293,12 @@ export default function TakeSurvey() {
             <button
               className="btn btn-accent btn-lg"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || isPageVideoPending}
             >
               {submitting ? "Submitting…" : "Submit survey"}
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={goNext}>
+            <button className="btn btn-primary" onClick={goNext} disabled={isPageVideoPending}>
               Next →
             </button>
           )}
