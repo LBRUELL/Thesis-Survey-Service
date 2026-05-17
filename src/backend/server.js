@@ -33,7 +33,7 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 // ─── Storage & Feature Config ──────────────────────────────────────────────────
 const DATA_DIR = path.join(__dirname, "data");
 const CREATE_PASSWORD = process.env.CREATE_PASSWORD || "research2025";
-const MAX_VIDEOS_PER_DEVICE = parseInt(process.env.MAX_VIDEOS_PER_DEVICE || "2", 10);
+const MAX_VIDEOS_PER_DEVICE = parseInt(process.env.MAX_VIDEOS_PER_DEVICE || "0", 10);
 const MAX_IMAGES_PER_DEVICE = parseInt(process.env.MAX_IMAGES_PER_DEVICE || "10", 10);
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
@@ -348,11 +348,9 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
+// This endpoint ONLY checks the status. It does not download the video.
 app.get("/api/video-status", async (req, res) => {
   try {
-    if (!GEMINI_API_KEY) {
-      return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
-    }
     const { operationName } = req.query;
     if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
@@ -361,8 +359,35 @@ app.get("/api/video-status", async (req, res) => {
       return res.status(502).json({ error: "Poll error" });
     }
     const data = await pollRes.json();
-    if (!data.done) return res.json({ status: "processing" });
-    if (data.error) return res.json({ status: "error", error: data.error.message });
+
+    if (data.error) {
+      return res.json({ status: "error", error: data.error.message });
+    }
+    if (data.done) {
+      return res.json({ status: "complete" });
+    }
+    return res.json({ status: "processing" });
+
+  } catch (err) {
+    console.error("Video status check error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// This new endpoint is called ONCE by the client to get the final video.
+app.get("/api/get-video-result", async (req, res) => {
+  try {
+    const { operationName } = req.query;
+    if (!operationName) return res.status(400).json({ error: "operationName is required" });
+
+    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
+    if (!pollRes.ok) {
+      return res.status(502).json({ error: "Final poll error" });
+    }
+    const data = await pollRes.json();
+    if (!data.done || data.error) {
+      return res.status(404).json({ error: "Video not ready or failed", details: data.error });
+    }
 
     const samples = data.response?.generateVideoResponse?.generatedSamples || [];
     const videoUri = samples[0]?.video?.uri;
@@ -373,21 +398,23 @@ app.get("/api/video-status", async (req, res) => {
     }
 
     const videoFilename = `${uuidv4()}.mp4`;
-    const videoPath = path.join(DATA_DIR, "videos", videoFilename); // Use DATA_DIR
+    const videoPath = path.join(DATA_DIR, "videos", videoFilename);
 
     const videoDownload = await fetch(videoUri);
     const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
     await fs.writeFile(videoPath, videoBuffer);
 
+    // Return the virtual path that the client will use.
     res.json({
       status: "complete",
-      videoUrl: `/videos/${videoFilename}`, // This path is virtual, used by client to get filename
+      videoUrl: `/videos/${videoFilename}`, 
     });
   } catch (err) {
-    console.error("Video status error:", err);
+    console.error("Get video result error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ─── Gemini Image Generation ──────────────────────────────────────────────────
 app.post("/api/generate-image", upload.single("image"), async (req, res) => {

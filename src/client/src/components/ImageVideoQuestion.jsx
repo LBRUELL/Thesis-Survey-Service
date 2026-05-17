@@ -164,13 +164,22 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         const data = await res.json();
 
         if (data.status === "complete") {
-          setProgress({ label: "Video ready!", pct: 100 });
+          // Stop polling and fetch the final result
+          clearTimeout(pollTimerRef.current);
+          setProgress({ label: "Downloading video...", pct: 95 });
 
-          const videoFilename = data.videoUrl.split('/').pop();
+          const resultRes = await fetch(`${apiUrl("/api/get-video-result")}?operationName=${encodeURIComponent(operationName)}`);
+          const resultData = await resultRes.json();
+
+          if (!resultRes.ok) {
+            throw new Error(resultData.error || "Failed to get final video.");
+          }
+
+          const videoFilename = resultData.videoUrl.split('/').pop();
           const streamUrl = apiUrl(`/api/stream-video/${videoFilename}`);
           
           console.log("!!!!!!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!!!!");
-          console.log("Received videoUrl from backend:", data.videoUrl);
+          console.log("Received videoUrl from backend:", resultData.videoUrl);
           console.log("Constructed streaming URL for <video> tag:", streamUrl);
           console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
