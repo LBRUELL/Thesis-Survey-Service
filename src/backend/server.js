@@ -310,7 +310,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
-const SIMULATED_DELAY_MS = 3 * 60 * 1000; // 3 minutes, matching worst-case VEO timing
+const SIMULATED_DELAY_MS = 1 * 60 * 1000; // 1 minute, matching worst-case VEO timing
 const TEST_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4";
 
 // Test endpoint — mimics get-video-result but uses a free public video
