@@ -190,6 +190,11 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
           );
           const resultData = await resultRes.json();
 
+          if (resultRes.status === 202) {
+            await new Promise(r => setTimeout(r, 2000));
+            return pollVideo(operationName, currentPreview);
+          }
+
           if (!resultRes.ok) {
             throw new Error(resultData.error || "Failed to get final video.");
           }
