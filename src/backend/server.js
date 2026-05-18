@@ -368,20 +368,28 @@ app.get("/api/get-video-result", async (req, res) => {
 
     const samples = data.response?.generateVideoResponse?.generatedSamples || [];
     const videoUri = samples[0]?.video?.uri;
-    if (!videoUri) {
-      return res.status(502).json({ error: "No video URI found in Google's response" });
-    }
+    console.log("[GET-VIDEO] videoUri:", videoUri);
 
-    // Download the video and send as base64 — no disk write needed
-    const videoDownload = await fetch(videoUri);
+    if (!videoUri) return res.status(502).json({ error: "No video URI found" });
+
+    // Try adding the API key — Google file URIs often require it
+    const fetchUri = videoUri.includes("?")
+      ? `${videoUri}&key=${GEMINI_API_KEY}`
+      : `${videoUri}?key=${GEMINI_API_KEY}`;
+
+    const videoDownload = await fetch(fetchUri);
+    console.log("[GET-VIDEO] download status:", videoDownload.status);
+    console.log("[GET-VIDEO] download content-type:", videoDownload.headers.get("content-type"));
+
     const videoBuffer = Buffer.from(await videoDownload.arrayBuffer());
+    console.log("[GET-VIDEO] buffer size:", videoBuffer.length);
+    console.log("[GET-VIDEO] first bytes (hex):", videoBuffer.slice(0, 16).toString("hex"));
+    // A valid MP4 will show: 00000020667479... (the "ftyp" box)
+    // An error JSON/HTML will show readable ASCII like: 7b226572726f72... = {"error"
 
-    res.json({
-      status: "complete",
-      videoBase64: videoBuffer.toString("base64"),
-    });
+    res.json({ status: "complete", videoBase64: videoBuffer.toString("base64") });
   } catch (err) {
-    console.error("Get video result error:", err);
+    console.error("[GET-VIDEO] error:", err);
     res.status(500).json({ error: err.message });
   }
 });
