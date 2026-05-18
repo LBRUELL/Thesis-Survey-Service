@@ -257,6 +257,12 @@ app.get("/api/surveys/:id/responses", async (req, res) => {
 });
 
 // ─── Gemini VEO Routes ─────────────────────────────────────────────────────────
+const VEO_MODELS = [
+    "veo-3.1-fast-generate-preview",
+    "veo-3.0-fast-generate-001",
+    "veo-3.1-generate-preview",
+];
+
 app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
@@ -283,25 +289,43 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     const base64Image = imageBuffer.toString("base64");
     const mimeType = req.file.mimetype;
 
-    const veoRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-001:predictLongRunning?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            instances: [{ prompt, image: { bytesBase64Encoded: base64Image, mimeType } }],
-            parameters: { durationSeconds: 4 },
-          }),
-        }
-    );
+    let operation;
+    for (const model of VEO_MODELS) {
+        console.log(`[VEO] Attempting to generate video with model: ${model}`);
+        const veoRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                instances: [{ prompt, image: { bytesBase64Encoded: base64Image, mimeType } }],
+                parameters: { durationSeconds: 4 },
+              }),
+            }
+        );
 
-    if (!veoRes.ok) {
-      const errBody = await veoRes.json().catch(() => ({}));
-      console.error("VEO API error:", errBody);
-      return res.status(502).json({ error: "Gemini VEO API error" });
+        const resJson = await veoRes.json();
+
+        if (veoRes.ok) {
+            operation = resJson;
+            console.log(`[VEO] Successfully initiated generation with ${model}`);
+            break; // Success, exit the loop
+        }
+
+        const isQuotaError = resJson.error?.code === 429 || resJson.error?.message?.toLowerCase().includes("quota");
+        if (isQuotaError) {
+            console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
+            continue; // Quota error, try the next model in the list
+        } else {
+            console.error(`[VEO] API error with model ${model}:`, resJson.error);
+            return res.status(502).json({ error: `Gemini VEO API error: ${resJson.error?.message || "Unknown error"}` });
+        }
     }
 
-    const operation = await veoRes.json();
+    if (!operation) {
+        return res.status(502).json({ error: "All VEO models failed due to quota or other errors." });
+    }
+
     if (deviceId) await recordUsage(deviceId, "videos");
     res.json({ operationName: operation.name, status: "processing" });
   } catch (err) {
