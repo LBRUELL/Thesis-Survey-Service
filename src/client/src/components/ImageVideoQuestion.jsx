@@ -70,31 +70,19 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       const localUrl = URL.createObjectURL(file);
       setPreview(localUrl);
       setStage("generating");
-      setProgress({ label: "Fetching test video...", pct: 80 });
+      setProgress({ label: "Simulating AI video generation…", pct: 60 });
 
       try {
-        const res = await fetch(apiUrl("/api/test-video-result"));
-        if (res.status === 202) {
-             // Let's poll for the test video just like we do for the real video if it's preparing
-             pollVideo("test-operation", localUrl, true);
-             return;
-        }
-
+        const res = await fetch(apiUrl("/api/test-video-result")); // single blocking fetch
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Test fetch failed");
 
-        let blobUrl;
-        if (data.videoBase64) {
-             const base64Str = data.videoBase64.replace(/\s/g, ''); // remove any whitespace
-             const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
-             const bytes = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
-             const blob = new Blob([bytes], { type: "video/mp4" });
-             blobUrl = URL.createObjectURL(blob);
-        } else if (data.videoUrl) {
-             blobUrl = data.videoUrl;
-        } else {
-             throw new Error(`No video data found in response. Response was: ${JSON.stringify(data)}`);
-        }
+        const base64Str = data.videoBase64.replace(/\s/g, '');
+        const binaryString = atob(base64Str);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "video/mp4" });
+        const blobUrl = URL.createObjectURL(blob);
 
         setVideoUrl(blobUrl);
         setStage("done");

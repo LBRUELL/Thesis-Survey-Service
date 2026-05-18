@@ -310,41 +310,20 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   }
 });
 
-const SIMULATED_DELAY_MS = 1 * 60 * 1000; // 1 minute, matching worst-case VEO timing
+const SIMULATED_DELAY_MS = 45000; // 45 seconds, matching VEO timing
 const TEST_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4";
 
 // Test endpoint — mimics get-video-result but uses a free public video
 const TEST_OPERATION = "test-operation";
 
-app.get("/api/test-video-result", (req, res) => {
+app.get("/api/test-video-result", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-
-  const cached = videoCache.get("test-operation");
-
-  if (!cached) {
-    videoCache.set("test-operation", "downloading");
-    (async () => {
-      try {
-        console.log(`[TEST] Simulating background download (${SIMULATED_DELAY_MS}ms delay)...`);
-        await new Promise(r => setTimeout(r, SIMULATED_DELAY_MS));
-        const dl = await fetch(TEST_VIDEO_URL);
-        const buf = Buffer.from(await dl.arrayBuffer());
-        videoCache.set("test-operation", buf.toString("base64"));
-        console.log(`[TEST] Ready: ${buf.length} bytes`);
-        setTimeout(() => videoCache.delete("test-operation"), 10 * 60 * 1000);
-      } catch (err) {
-        console.error("[TEST] Background download failed:", err);
-        videoCache.delete("test-operation");
-      }
-    })();
-    return res.status(202).json({ status: "preparing" });
-  }
-
-  if (cached === "downloading") {
-    return res.status(202).json({ status: "preparing" });
-  }
-
-  res.json({ status: "complete", videoBase64: cached });
+  console.log(`[TEST] Blocking for ${SIMULATED_DELAY_MS}ms then downloading...`);
+  await new Promise(r => setTimeout(r, SIMULATED_DELAY_MS));
+  const dl = await fetch(TEST_VIDEO_URL);
+  const buf = Buffer.from(await dl.arrayBuffer());
+  console.log(`[TEST] Downloaded ${buf.length} bytes, sending response...`);
+  res.json({ status: "complete", videoBase64: buf.toString("base64") });
 });
 
 // This endpoint ONLY checks the status. It does not download the video.
