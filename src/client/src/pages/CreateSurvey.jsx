@@ -7,6 +7,7 @@ import { apiUrl } from "../utils/api.js";
 const QUESTION_TYPES = [
   { value: "text", label: "Short Text" },
   { value: "textarea", label: "Long Text" },
+  { value: "multiple_choice", label: "Multiple Choice" },
   { value: "likert5", label: "Likert Scale (1–5)" },
   { value: "likert7", label: "Likert Scale (1–7)" },
   { value: "image_video", label: "Image Upload + AI Video (VEO)" },
@@ -29,6 +30,7 @@ function newQuestion() {
     variableName: "",
     videoPrompt: DEFAULT_VEO_PROMPT,
     imagePrompt: DEFAULT_IMAGE_PROMPT,
+    options: ["Option 1", "Option 2"], // Default options for multiple choice
   };
 }
 
@@ -97,6 +99,8 @@ function CreateSurveyBuilder() {
           return setError("All questions must have text.");
         if (q.type === "image_video" && !q.videoPrompt?.trim())
           return setError("Image/Video questions need a video generation prompt.");
+        if (q.type === "multiple_choice" && (!q.options || q.options.length < 2))
+          return setError("Multiple choice questions need at least two options.");
       }
     }
 
@@ -325,6 +329,49 @@ function QuestionEditor({ question, index, onChange, onRemove, canRemove, allQue
           <span>Numbers only</span>
           <span className={styles.toggleHint}>Accepts digits, decimals, and negatives — useful for height, weight, percentages, etc.</span>
         </label>
+      )}
+
+      {question.type === "multiple_choice" && (
+        <div className="field" style={{ marginTop: 12 }}>
+          <label>Options</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+            {(question.options || []).map((opt, i) => (
+              <div key={i} style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="input"
+                  value={opt}
+                  onChange={(e) => {
+                    const newOpts = [...question.options];
+                    newOpts[i] = e.target.value;
+                    onChange("options", newOpts);
+                  }}
+                  placeholder={`Option ${i + 1}`}
+                />
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    const newOpts = question.options.filter((_, idx) => idx !== i);
+                    onChange("options", newOpts);
+                  }}
+                  disabled={question.options.length <= 2}
+                  title="Remove option"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button
+              className="btn btn-outline text-sm"
+              style={{ alignSelf: "flex-start", marginTop: 4 }}
+              onClick={() => {
+                const newOpts = [...(question.options || []), `Option ${(question.options?.length || 0) + 1}`];
+                onChange("options", newOpts);
+              }}
+            >
+              + Add option
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Variable name — used in VEO prompt interpolation */}

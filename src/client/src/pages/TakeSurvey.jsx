@@ -100,7 +100,7 @@ export default function TakeSurvey() {
       const val = answers[q.id];
 
       if (q.required) {
-        if (q.type === "text" || q.type === "textarea") {
+        if (q.type === "text" || q.type === "textarea" || q.type === "multiple_choice") {
           if (!val?.trim()) errors[q.id] = "This question is required.";
         } else if (q.type === "likert5" || q.type === "likert7") {
           if (val == null) errors[q.id] = "Please select a rating.";
@@ -235,6 +235,23 @@ export default function TakeSurvey() {
                       onChange={(e) => setAnswer(q.id, e.target.value)}
                       placeholder="Your answer…"
                     />
+                  )}
+
+                  {q.type === "multiple_choice" && (
+                    <div className={styles.mcOptions}>
+                      {(q.options || []).map((opt, i) => (
+                        <label key={i} className={styles.mcLabel}>
+                          <input
+                            type="radio"
+                            name={q.id}
+                            value={opt}
+                            checked={answers[q.id] === opt}
+                            onChange={(e) => setAnswer(q.id, e.target.value)}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      ))}
+                    </div>
                   )}
 
                   {(q.type === "likert5" || q.type === "likert7") && (
