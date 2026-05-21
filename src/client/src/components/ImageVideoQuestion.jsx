@@ -107,7 +107,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
     setError(null);
     setStage("uploading");
-    setProgress({ label: "Uploading image…", pct: 20 });
+    setProgress({ label: "Uploading image…", pct: 10 });
 
     const localUrl = URL.createObjectURL(file);
     setPreview(localUrl);
@@ -138,7 +138,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
             pct: 25 + attempt * 5,
           });
         } else {
-          setProgress({ label: "Sending to Gemini VEO…", pct: 40 });
+          setProgress({ label: "Pre-processing image...", pct: 30 });
         }
 
         res = await fetch(apiUrl("/api/generate-video"), {
