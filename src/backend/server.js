@@ -258,6 +258,7 @@ app.get("/api/surveys/:id/responses", async (req, res) => {
 
 // ─── Gemini VEO Routes ─────────────────────────────────────────────────────────
 const VEO_MODELS = [
+    "veo-1.0-generate-001", // More likely to be available in free tier
     "veo-3.1-fast-generate-preview",
     "veo-3.0-fast-generate-001",
     "veo-3.1-generate-preview",
