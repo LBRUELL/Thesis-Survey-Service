@@ -312,7 +312,7 @@ export default function TakeSurvey() {
               onClick={handleSubmit}
               disabled={submitting || isPageVideoPending}
             >
-              {submitting ? "Submitting…" : "Submit survey"}
+              {submitting ? "Submitting…" : "Proceed"}
             </button>
           ) : (
             <button className="btn btn-primary" onClick={goNext} disabled={isPageVideoPending}>
