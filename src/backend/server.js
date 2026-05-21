@@ -257,11 +257,19 @@ app.get("/api/surveys/:id/responses", async (req, res) => {
 });
 
 // ─── Gemini VEO Routes ─────────────────────────────────────────────────────────
+// const VEO_MODELS = [
+//     "veo-3.1-fast-generate-preview",
+//     "veo-3.0-fast-generate-001",
+//     "veo-3.1-generate-preview",
+// ];
+
 const VEO_MODELS = [
-    "veo-3.1-fast-generate-preview",
+  "veo-3.1-lite-generate-preview",
     "veo-3.0-fast-generate-001",
+    "veo-3.1-fast-generate-preview",
     "veo-3.1-generate-preview",
-];
+    ];
+
 
 app.post("/api/generate-video", upload.single("image"), async (req, res) => {
   try {
