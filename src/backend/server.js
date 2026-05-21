@@ -291,14 +291,10 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     const originalBase64Image = originalImageBuffer.toString("base64");
     const originalMimeType = req.file.mimetype;
     
-    // We don't delete the uploaded file just yet in case we need it, or we delete it later.
-    // For now we can delete it since we have it in memory.
     await fs.unlink(req.file.path).catch(() => {});
 
     console.log(`[PIPELINE] Step 1: Pre-processing uploaded image via Gemini Image Generation...`);
     
-    // Step 2: Use Gemini 2.5 Flash Image to generate a new image based on the prompt + original image.
-    // The prompt is the exact prompt the user entered, which asks to put the person in a new outfit/setting.
     const imageGenRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
         {
@@ -308,7 +304,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             contents: [
                 { 
                     parts: [
-                        { text: prompt }, 
+                        { text: "This is for a virtual try-on. " + prompt }, 
                         { inline_data: { mime_type: originalMimeType, data: originalBase64Image } }
                     ] 
                 }
@@ -328,16 +324,15 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     const generatedImagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     
     if (!generatedImagePart) {
+      console.error("[PIPELINE] No image part in response:", imageGenData);
       return res.status(502).json({ error: "No pre-processed image returned by Gemini" });
     }
 
-    // This is the new edited image that we will feed to VEO
     const processedBase64Image = generatedImagePart.inlineData.data;
     const processedMimeType = generatedImagePart.inlineData.mimeType;
 
     console.log(`[PIPELINE] Step 2: Image pre-processing successful. Sending edited image to VEO...`);
 
-    // Step 3: Pass the PROCESSED image to VEO for video generation
     let operation;
     for (const model of VEO_MODELS) {
         console.log(`[VEO] Attempting to generate video with model: ${model}`);
@@ -358,13 +353,13 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
         if (veoRes.ok) {
             operation = resJson;
             console.log(`[VEO] Successfully initiated generation with ${model}`);
-            break; // Success, exit the loop
+            break; 
         }
 
         const isQuotaError = resJson.error?.code === 429 || resJson.error?.message?.toLowerCase().includes("quota");
         if (isQuotaError) {
             console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
-            continue; // Quota error, try the next model in the list
+            continue;
         } else {
             console.error(`[VEO] API error with model ${model}:`, resJson.error);
             return res.status(502).json({ error: `Gemini VEO API error: ${resJson.error?.message || "Unknown error"}` });
