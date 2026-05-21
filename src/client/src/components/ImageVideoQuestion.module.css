@@ -104,6 +104,11 @@
   gap: 6px;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .progressLabel {
   font-size: 0.875rem;
   font-weight: 500;
