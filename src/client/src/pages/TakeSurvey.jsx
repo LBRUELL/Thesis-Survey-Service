@@ -116,7 +116,9 @@ export default function TakeSurvey() {
         }
       }
 
-      if (q.type === "image_video" && answers[q.id]?.videoUrl && !videoComplete[q.id]) {
+      if (q.type === "image_video" && answers[q.id] && !answers[q.id].videoUrl) {
+        errors[q.id + "_video"] = "Please wait for the video to finish generating.";
+      } else if (q.type === "image_video" && answers[q.id]?.videoUrl && !videoComplete[q.id]) {
         errors[q.id + "_video"] = "Please watch the entire video before continuing.";
       }
     }
@@ -168,7 +170,7 @@ export default function TakeSurvey() {
   };
   
   const isPageVideoPending = page.questions.some(
-    (q) => q.type === "image_video" && answers[q.id]?.videoUrl && !videoComplete[q.id]
+    (q) => q.type === "image_video" && answers[q.id] && !videoComplete[q.id]
   );
 
   return (
