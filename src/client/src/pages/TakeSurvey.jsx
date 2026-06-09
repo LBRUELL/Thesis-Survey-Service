@@ -161,7 +161,17 @@ export default function TakeSurvey() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submission failed");
-      navigate("/thank-you", { state: { surveyTitle: survey.title, completionMessage: survey.completionMessage, redirectUrl: survey.redirectUrl } });
+
+      if (survey.redirectUrl) {
+        window.location.href = survey.redirectUrl;
+      } else {
+        navigate("/thank-you", {
+          state: {
+            surveyTitle: survey.title,
+            completionMessage: survey.completionMessage,
+          },
+        });
+      }
     } catch (err) {
       setValidationErrors({ _submit: err.message });
     } finally {
