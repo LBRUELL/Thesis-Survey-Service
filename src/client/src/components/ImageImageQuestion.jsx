@@ -50,17 +50,46 @@ export default function ImageImageQuestion({ surveyId, imagePrompt, value, onCha
     formData.append("prompt", imagePrompt || "Generate a high-quality styled image.");
     if (surveyId) formData.append("surveyId", surveyId);
 
+    const MAX_RETRIES = 4;
+    const RETRY_DELAYS = [4000, 8000, 16000, 30000];
+
     try {
-      setProgress({ label: "Gemini is generating…", pct: 50 });
+      let res, data;
 
-      const res = await fetch(apiUrl("/api/generate-image"), {
-        method: "POST",
-        headers: { "x-device-id": getDeviceId() },
-        body: formData,
-      });
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const wait = RETRY_DELAYS[attempt - 1];
+          const secs = Math.round(wait / 1000);
+          setProgress({
+            label: `Servers busy — retrying in ${secs}s… (attempt ${attempt + 1} of ${MAX_RETRIES + 1})`,
+            pct: 20 + attempt * 5,
+            retry: true,
+          });
+          await new Promise((r) => setTimeout(r, wait));
+          setProgress({
+            label: `Retrying… (attempt ${attempt + 1} of ${MAX_RETRIES + 1})`,
+            pct: 25 + attempt * 5,
+          });
+        } else {
+          setProgress({ label: "Pre-processing image...", pct: 30 });
+        }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
+        res = await fetch(apiUrl("/api/generate-image"), {
+          method: "POST",
+          headers: { "x-device-id": getDeviceId() },
+          body: formData,
+        });
+        data = await res.json();
+
+        const isOverloaded = res.status === 503 || res.status === 429 || (data.error || "").includes("high demand");
+        if (res.ok || !isOverloaded) break;
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error("The image generation service is currently overloaded. Please wait a minute and try uploading again.");
+        }
+      }
+
+      if (!res.ok) throw new Error(data.details || data.error || "Generation failed");
 
       // SUCCESS: We expect 'data.imageBase64' from the server now
       // It should look like "data:image/png;base64,iVBORw0KG..."
