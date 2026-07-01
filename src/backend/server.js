@@ -348,22 +348,22 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             }
         );
 
-        const resJson = await veoRes.json();
-
-        if (veoRes.ok) {
-            operation = resJson;
-            console.log(`[VEO] Successfully initiated generation with ${model}`);
-            break; 
-        }
-
-        const isQuotaError = resJson.error?.code === 429 || resJson.error?.message?.toLowerCase().includes("quota");
-        if (isQuotaError) {
+        if (!veoRes.ok) {
+          const errorBody = await veoRes.text();
+          console.error(`[VEO] API error with model ${model}:`, errorBody);
+          const isQuotaError = (veoRes.status === 429) || errorBody.toLowerCase().includes("quota");
+          if (isQuotaError) {
             console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
             continue;
-        } else {
-            console.error(`[VEO] API error with model ${model}:`, resJson.error);
-            return res.status(502).json({ error: `Gemini VEO API error: ${resJson.error?.message || "Unknown error"}` });
+          } else {
+            return res.status(502).json({ error: `Gemini VEO API error: ${errorBody}` });
+          }
         }
+
+        const resJson = await veoRes.json();
+        operation = resJson;
+        console.log(`[VEO] Successfully initiated generation with ${model}`);
+        break; 
     }
 
     if (!operation) {
@@ -503,11 +503,14 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     );
 
     if (!genRes.ok) {
-      return res.status(502).json({ error: "Gemini image generation error" });
+      const errorBody = await genRes.text();
+      console.error("Gemini image generation error:", genRes.status, errorBody);
+      return res.status(502).json({ error: "Gemini image generation error", details: errorBody });
     }
     const data = await genRes.json();
     const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!imagePart) {
+      console.error("No image part in Gemini response:", data);
       return res.status(502).json({ error: "No image returned by Gemini" });
     }
     if (deviceId) await recordUsage(deviceId, "images");
