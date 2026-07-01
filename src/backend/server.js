@@ -6,7 +6,7 @@ const fs = require("fs").promises;
 const fsSync = require("fs");
 const path = require("path");
 const fetch = require("node-fetch");
-const videoCache = new Map(); // shared across all video routes
+const sharp = require("sharp");
 
 const app = express();
 
@@ -66,11 +66,7 @@ if (fsSync.existsSync(CLIENT_BUILD)) {
 }
 
 // ─── File Upload Config ────────────────────────────────────────────────────────
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads")),
-  filename: (req, file, cb) =>
-    cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
-});
+const storage = multer.memoryStorage(); // Use memory storage to process with sharp
 const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -303,12 +299,13 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
-    // Step 1: Read the user's uploaded original selfie
-    const originalImageBuffer = await fs.readFile(req.file.path);
-    const originalBase64Image = originalImageBuffer.toString("base64");
-    const originalMimeType = req.file.mimetype;
-    
-    await fs.unlink(req.file.path).catch(() => {});
+    // Step 1: Resize and compress the image
+    const processedImageBuffer = await sharp(req.file.buffer)
+      .resize(1024, 1024, { fit: 'inside' })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    const originalBase64Image = processedImageBuffer.toString("base64");
+    const originalMimeType = 'image/jpeg';
 
     console.log(`[PIPELINE] Step 1: Pre-processing uploaded image via Gemini Image Generation...`);
     
@@ -502,10 +499,13 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image uploaded" });
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
-    const imageBuffer = await fs.readFile(req.file.path);
-    const base64ImageInput = imageBuffer.toString("base64");
-    const mimeTypeInput = req.file.mimetype;
-    await fs.unlink(req.file.path).catch(() => {});
+    // Resize and compress the image
+    const processedImageBuffer = await sharp(req.file.buffer)
+      .resize(1024, 1024, { fit: 'inside' })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    const base64ImageInput = processedImageBuffer.toString("base64");
+    const mimeTypeInput = 'image/jpeg';
 
     const genRes = await fetchWithRetry(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
