@@ -314,13 +314,13 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
         }
     );
 
+    const imageGenText = await imageGenRes.text();
     if (!imageGenRes.ok) {
-      const errorText = await imageGenRes.text();
-      console.error("[PIPELINE] Image generation failed:", errorText);
-      return res.status(502).json({ error: "Gemini image pre-processing error: " + errorText });
+      console.error("[PIPELINE] Image generation failed:", imageGenText);
+      return res.status(502).json({ error: "Gemini image pre-processing error: " + imageGenText });
     }
     
-    const imageGenData = await imageGenRes.json();
+    const imageGenData = JSON.parse(imageGenText);
     const generatedImagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     
     if (!generatedImagePart) {
@@ -348,19 +348,19 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             }
         );
 
+        const veoText = await veoRes.text();
         if (!veoRes.ok) {
-          const errorBody = await veoRes.text();
-          console.error(`[VEO] API error with model ${model}:`, errorBody);
-          const isQuotaError = (veoRes.status === 429) || errorBody.toLowerCase().includes("quota");
+          console.error(`[VEO] API error with model ${model}:`, veoText);
+          const isQuotaError = (veoRes.status === 429) || veoText.toLowerCase().includes("quota");
           if (isQuotaError) {
             console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
             continue;
           } else {
-            return res.status(502).json({ error: `Gemini VEO API error: ${errorBody}` });
+            return res.status(502).json({ error: `Gemini VEO API error: ${veoText}` });
           }
         }
 
-        const resJson = await veoRes.json();
+        const resJson = JSON.parse(veoText);
         operation = resJson;
         console.log(`[VEO] Successfully initiated generation with ${model}`);
         break; 
@@ -502,12 +502,20 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
         }
     );
 
+    const genText = await genRes.text();
     if (!genRes.ok) {
-      const errorBody = await genRes.text();
-      console.error("Gemini image generation error:", genRes.status, errorBody);
-      return res.status(502).json({ error: "Gemini image generation error", details: errorBody });
+      console.error("Gemini image generation error:", genRes.status, genText);
+      return res.status(502).json({ error: "Gemini image generation error", details: genText });
     }
-    const data = await genRes.json();
+    
+    let data;
+    try {
+      data = JSON.parse(genText);
+    } catch (e) {
+      console.error("Failed to parse Gemini JSON response:", genText);
+      return res.status(502).json({ error: "Invalid JSON response from Gemini", details: genText });
+    }
+
     const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!imagePart) {
       console.error("No image part in Gemini response:", data);
