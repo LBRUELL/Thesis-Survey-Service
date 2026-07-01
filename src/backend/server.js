@@ -31,6 +31,23 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 console.log("GEMINI_API_KEY loaded:", GEMINI_API_KEY ? `${GEMINI_API_KEY.slice(0, 8)}...` : "MISSING");
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
+// ─── Robust Fetch Helper ───────────────────────────────────────────────────────
+async function fetchWithRetry(url, options, retries = 3, backoff = 3000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
+            const res = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeoutId);
+            return res;
+        } catch (error) {
+            if (i === retries - 1) throw error;
+            console.warn(`Fetch failed (attempt ${i + 1}/${retries}). Retrying in ${backoff}ms...`, error.message);
+            await new Promise(resolve => setTimeout(resolve, backoff * (i + 1)));
+        }
+    }
+}
+
 // ─── Storage & Feature Config ──────────────────────────────────────────────────
 const DATA_DIR = path.join(__dirname, "data");
 const CREATE_PASSWORD = process.env.CREATE_PASSWORD || "research2025";
@@ -295,7 +312,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
     console.log(`[PIPELINE] Step 1: Pre-processing uploaded image via Gemini Image Generation...`);
     
-    const imageGenRes = await fetch(
+    const imageGenRes = await fetchWithRetry(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
@@ -336,7 +353,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     let operation;
     for (const model of VEO_MODELS) {
         console.log(`[VEO] Attempting to generate video with model: ${model}`);
-        const veoRes = await fetch(
+        const veoRes = await fetchWithRetry(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${GEMINI_API_KEY}`,
             {
               method: "POST",
@@ -400,7 +417,7 @@ app.get("/api/video-status", async (req, res) => {
     const { operationName } = req.query;
     if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
-    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
+    const pollRes = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
     if (!pollRes.ok) {
       return res.status(502).json({ error: "Poll error" });
     }
@@ -426,7 +443,7 @@ app.get("/api/get-video-result", async (req, res) => {
     const { operationName } = req.query;
     if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
-    const pollRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
+    const pollRes = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
     if (!pollRes.ok) return res.status(502).json({ error: "Final poll error" });
 
     const data = await pollRes.json();
@@ -445,7 +462,7 @@ app.get("/api/get-video-result", async (req, res) => {
       ? `${videoUri}&key=${GEMINI_API_KEY}`
       : `${videoUri}?key=${GEMINI_API_KEY}`;
 
-    const videoDownload = await fetch(fetchUri);
+    const videoDownload = await fetchWithRetry(fetchUri);
     console.log("[GET-VIDEO] download status:", videoDownload.status);
     console.log("[GET-VIDEO] download content-type:", videoDownload.headers.get("content-type"));
 
@@ -490,7 +507,7 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
     const mimeTypeInput = req.file.mimetype;
     await fs.unlink(req.file.path).catch(() => {});
 
-    const genRes = await fetch(
+    const genRes = await fetchWithRetry(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
