@@ -455,19 +455,29 @@ app.get("/api/get-video-result", async (req, res) => {
     const { operationName } = req.query;
     if (!operationName) return res.status(400).json({ error: "operationName is required" });
 
-    const pollRes = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
-    if (!pollRes.ok) return res.status(502).json({ error: "Final poll error" });
+    let data;
+    for (let i = 0; i < 3; i++) { // Retry up to 3 times
+        const pollRes = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${GEMINI_API_KEY}`);
+        if (!pollRes.ok) return res.status(502).json({ error: "Final poll error" });
 
-    const data = await pollRes.json();
-    if (!data.done || data.error) {
-      return res.status(404).json({ error: "Video not ready or failed", details: data.error });
+        data = await pollRes.json();
+        if (!data.done || data.error) {
+          return res.status(404).json({ error: "Video not ready or failed", details: data.error });
+        }
+
+        const samples = data.response?.generateVideoResponse?.generatedSamples || [];
+        const videoUri = samples[0]?.video?.uri;
+        if (videoUri) break; // Found it, exit loop
+
+        console.log(`[GET-VIDEO] No video URI found on attempt ${i + 1}. Retrying in 3s...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     const samples = data.response?.generateVideoResponse?.generatedSamples || [];
     const videoUri = samples[0]?.video?.uri;
     console.log("[GET-VIDEO] videoUri:", videoUri);
 
-    if (!videoUri) return res.status(502).json({ error: "No video URI found" });
+    if (!videoUri) return res.status(502).json({ error: "No video URI found after multiple attempts." });
 
     // Try adding the API key — Google file URIs often require it
     const fetchUri = videoUri.includes("?")
