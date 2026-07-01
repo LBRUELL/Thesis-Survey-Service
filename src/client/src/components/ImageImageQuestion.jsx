@@ -20,6 +20,10 @@ export default function ImageImageQuestion({ surveyId, imagePrompt, value, onCha
   const fileRef = useRef();
   const dragRef = useRef(null);
 
+  const setErrorMessage = (msg) => {
+    setError(`${msg} Please retry the upload.`);
+  };
+
   useEffect(() => {
     const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
     fetch(url, { headers: { "x-device-id": getDeviceId() } })
@@ -30,11 +34,11 @@ export default function ImageImageQuestion({ surveyId, imagePrompt, value, onCha
 
   const handleFile = useCallback(async (file) => {
     if (!file || !file.type.startsWith("image/")) {
-      setError("Please upload an image file (JPEG, PNG, WebP, etc.)");
+      setErrorMessage("Please upload an image file (JPEG, PNG, WebP, etc.)");
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      setError("Image must be under 20 MB.");
+      setErrorMessage("Image must be under 20 MB.");
       return;
     }
 
@@ -85,7 +89,7 @@ export default function ImageImageQuestion({ surveyId, imagePrompt, value, onCha
         if (res.ok || !isOverloaded) break;
 
         if (attempt === MAX_RETRIES) {
-          throw new Error("The image generation service is currently overloaded. Please wait a minute and try uploading again.");
+          throw new Error("The image generation service is currently overloaded.");
         }
       }
 
@@ -102,7 +106,7 @@ export default function ImageImageQuestion({ surveyId, imagePrompt, value, onCha
 
       onChange({ imagePath: localUrl, generatedUrl: finalImageUrl });
     } catch (err) {
-      setError(err.message);
+      setErrorMessage(err.message);
       setStage("idle");
       setProgress(null);
     }

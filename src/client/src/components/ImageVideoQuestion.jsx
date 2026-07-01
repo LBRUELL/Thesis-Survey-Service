@@ -29,6 +29,10 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
   const dragRef = useRef(null);
   const maxWatchedRef = useRef(0);
 
+  const setErrorMessage = (msg) => {
+    setError(`${msg} Please retry the upload.`);
+  };
+
   useEffect(() => {
     const url = surveyId ? apiUrl(`/api/usage?surveyId=${surveyId}`) : apiUrl("/api/usage");
     fetch(url, { headers: { "x-device-id": getDeviceId() } })
@@ -89,7 +93,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         setProgress(null);
         onChange({ imagePath: localUrl, videoUrl: blobUrl });
       } catch (err) {
-        setError(err.message);
+        setErrorMessage(err.message);
         setStage("idle");
         setProgress(null);
       }
@@ -97,11 +101,11 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
     }
     
     if (!file || !file.type.startsWith("image/")) {
-      setError("Please upload an image file (JPEG, PNG, WebP, etc.)");
+      setErrorMessage("Please upload an image file (JPEG, PNG, WebP, etc.)");
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      setError("Image must be under 20 MB.");
+      setErrorMessage("Image must be under 20 MB.");
       return;
     }
 
@@ -152,7 +156,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         if (res.ok || !isOverloaded) break;
 
         if (attempt === MAX_RETRIES) {
-          throw new Error("The video generation service is currently overloaded. Please wait a minute and try uploading again.");
+          throw new Error("The video generation service is currently overloaded.");
         }
       }
 
@@ -166,7 +170,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       pollCountRef.current = 0;
       pollVideo(data.operationName, localUrl, false);
     } catch (err) {
-      setError(err.message);
+      setErrorMessage(err.message);
       setStage("idle");
       setProgress(null);
     }
@@ -256,13 +260,13 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         } else if (data.status === "error") {
           throw new Error(data.error || "Video generation failed");
         } else if (pollCountRef.current >= MAX_POLLS) {
-          throw new Error("Video generation timed out. Please try again.");
+          throw new Error("Video generation timed out.");
         } else {
           pollVideo(operationName, currentPreview, false);
         }
       } catch (err) {
         console.error("Polling error:", err);
-        setError(err.message);
+        setErrorMessage(err.message);
         setStage("idle");
         setProgress(null);
       }
