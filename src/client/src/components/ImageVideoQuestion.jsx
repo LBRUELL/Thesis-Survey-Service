@@ -222,7 +222,10 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
         if (data.status === "complete") {
           clearTimeout(pollTimerRef.current);
-          setProgress({ label: "Downloading video...", pct: 95 });
+          setProgress({ label: "Finalizing video...", pct: 95 });
+          
+          // Add a 5-second delay to account for the race condition
+          await new Promise(resolve => setTimeout(resolve, 5000));
 
           const resultRes = await fetch(
               `${apiUrl("/api/get-video-result")}?operationName=${encodeURIComponent(operationName)}`
