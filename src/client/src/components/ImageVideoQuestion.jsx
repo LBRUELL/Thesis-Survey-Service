@@ -148,7 +148,8 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         });
         data = await res.json();
 
-        if (res.ok || (res.status !== 503 && res.status !== 429)) break;
+        const isOverloaded = res.status === 503 || res.status === 429 || (data.error || "").includes("high demand");
+        if (res.ok || !isOverloaded) break;
 
         if (attempt === MAX_RETRIES) {
           throw new Error("The video generation service is currently overloaded. Please wait a minute and try uploading again.");

@@ -314,13 +314,13 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
         }
     );
 
+    const imageGenText = await imageGenRes.text();
     if (!imageGenRes.ok) {
-      const errorText = await imageGenRes.text();
-      console.error("[PIPELINE] Image generation failed:", errorText);
-      return res.status(502).json({ error: "Gemini image pre-processing error: " + errorText });
+      console.error("[PIPELINE] Image generation failed:", imageGenText);
+      return res.status(502).json({ error: "Gemini image pre-processing error: " + imageGenText });
     }
     
-    const imageGenData = await imageGenRes.json();
+    const imageGenData = JSON.parse(imageGenText);
     const generatedImagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     
     if (!generatedImagePart) {
@@ -348,22 +348,22 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             }
         );
 
-        const resJson = await veoRes.json();
-
-        if (veoRes.ok) {
-            operation = resJson;
-            console.log(`[VEO] Successfully initiated generation with ${model}`);
-            break; 
-        }
-
-        const isQuotaError = resJson.error?.code === 429 || resJson.error?.message?.toLowerCase().includes("quota");
-        if (isQuotaError) {
+        const veoText = await veoRes.text();
+        if (!veoRes.ok) {
+          console.error(`[VEO] API error with model ${model}:`, veoText);
+          const isQuotaError = (veoRes.status === 429) || veoText.toLowerCase().includes("quota");
+          if (isQuotaError) {
             console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
             continue;
-        } else {
-            console.error(`[VEO] API error with model ${model}:`, resJson.error);
-            return res.status(502).json({ error: `Gemini VEO API error: ${resJson.error?.message || "Unknown error"}` });
+          } else {
+            return res.status(502).json({ error: `Gemini VEO API error: ${veoText}` });
+          }
         }
+
+        const resJson = JSON.parse(veoText);
+        operation = resJson;
+        console.log(`[VEO] Successfully initiated generation with ${model}`);
+        break; 
     }
 
     if (!operation) {
@@ -502,12 +502,23 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
         }
     );
 
+    const genText = await genRes.text();
     if (!genRes.ok) {
-      return res.status(502).json({ error: "Gemini image generation error" });
+      console.error("Gemini image generation error:", genRes.status, genText);
+      return res.status(502).json({ error: "Gemini image generation error", details: genText });
     }
-    const data = await genRes.json();
+    
+    let data;
+    try {
+      data = JSON.parse(genText);
+    } catch (e) {
+      console.error("Failed to parse Gemini JSON response:", genText);
+      return res.status(502).json({ error: "Invalid JSON response from Gemini", details: genText });
+    }
+
     const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!imagePart) {
+      console.error("No image part in Gemini response:", data);
       return res.status(502).json({ error: "No image returned by Gemini" });
     }
     if (deviceId) await recordUsage(deviceId, "images");
