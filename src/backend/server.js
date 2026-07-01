@@ -32,19 +32,34 @@ console.log("GEMINI_API_KEY loaded:", GEMINI_API_KEY ? `${GEMINI_API_KEY.slice(0
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Robust Fetch Helper ───────────────────────────────────────────────────────
-async function fetchWithRetry(url, options, retries = 3, backoff = 3000) {
+async function fetchWithRetry(url, options, retries = 4, backoff = 4000) {
+    const retryStatusCodes = [429, 503];
     for (let i = 0; i < retries; i++) {
+        let res;
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
-            const res = await fetch(url, { ...options, signal: controller.signal });
+            res = await fetch(url, { ...options, signal: controller.signal });
             clearTimeout(timeoutId);
-            return res;
+
+            if (!retryStatusCodes.includes(res.status)) {
+                return res; // Success or non-retryable error
+            }
+
+            const errorText = await res.text();
+            console.warn(`API returned retryable status ${res.status} (attempt ${i + 1}/${retries}): ${errorText}`);
+
         } catch (error) {
-            if (i === retries - 1) throw error;
             console.warn(`Fetch failed (attempt ${i + 1}/${retries}). Retrying in ${backoff}ms...`, error.message);
-            await new Promise(resolve => setTimeout(resolve, backoff * (i + 1)));
         }
+        
+        if (i === retries - 1) {
+            // If it's the last attempt, return the problematic response or throw the last error
+            if (res) return res; 
+            throw new Error(`Request failed after ${retries} attempts.`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, backoff * Math.pow(2, i)));
     }
 }
 
