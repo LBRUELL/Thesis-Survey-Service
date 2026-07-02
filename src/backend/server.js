@@ -372,7 +372,11 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
-                        parameters: { durationSeconds: 6 },
+                        parameters: {
+                            durationSeconds: 6,
+                            personGeneration: "allow_adult",
+                            includeRaiReason: true
+                        },
                     }),
                 }
             );
