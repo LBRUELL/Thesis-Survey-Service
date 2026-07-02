@@ -99,7 +99,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       }
       return;
     }
-    
+
     if (!file || !file.type.startsWith("image/")) {
       setErrorMessage("Please upload an image file (JPEG, PNG, WebP, etc.)");
       return;
@@ -185,33 +185,33 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
 
       try {
         if (isTest) {
-             const resultRes = await fetch(apiUrl("/api/test-video-result"));
-             if (resultRes.status === 202) {
-                  return pollVideo(operationName, currentPreview, true);
-             }
-             
-             const resultData = await resultRes.json();
-             if (!resultRes.ok) throw new Error(resultData.error || "Test fetch failed");
-             
-             let blobUrl;
-             if (resultData.videoBase64) {
-                  const base64Str = resultData.videoBase64.replace(/\s/g, '');
-                  const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
-                  const byteArray = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
-                  const blob = new Blob([byteArray], { type: "video/mp4" });
-                  blobUrl = URL.createObjectURL(blob);
-             } else {
-                  throw new Error(`No video data found in response. Response was: ${JSON.stringify(resultData)}`);
-             }
-             
-             setVideoUrl(blobUrl);
-             setStage("done");
-             setProgress(null);
-             setWatchPct(0);
-             setVideoEnded(false);
-             maxWatchedRef.current = 0;
-             onChange({ imagePath: currentPreview, videoUrl: blobUrl });
-             return;
+          const resultRes = await fetch(apiUrl("/api/test-video-result"));
+          if (resultRes.status === 202) {
+            return pollVideo(operationName, currentPreview, true);
+          }
+
+          const resultData = await resultRes.json();
+          if (!resultRes.ok) throw new Error(resultData.error || "Test fetch failed");
+
+          let blobUrl;
+          if (resultData.videoBase64) {
+            const base64Str = resultData.videoBase64.replace(/\s/g, '');
+            const paddedStr = base64Str.padEnd(base64Str.length + (4 - (base64Str.length % 4)) % 4, "=");
+            const byteArray = Uint8Array.from(atob(paddedStr), c => c.charCodeAt(0));
+            const blob = new Blob([byteArray], { type: "video/mp4" });
+            blobUrl = URL.createObjectURL(blob);
+          } else {
+            throw new Error(`No video data found in response. Response was: ${JSON.stringify(resultData)}`);
+          }
+
+          setVideoUrl(blobUrl);
+          setStage("done");
+          setProgress(null);
+          setWatchPct(0);
+          setVideoEnded(false);
+          maxWatchedRef.current = 0;
+          onChange({ imagePath: currentPreview, videoUrl: blobUrl });
+          return;
         }
 
 
@@ -223,7 +223,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
         if (data.status === "complete") {
           clearTimeout(pollTimerRef.current);
           setProgress({ label: "Finalizing video...", pct: 95 });
-          
+
           // Add a 5-second delay to account for the race condition
           await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -238,6 +238,18 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
           }
 
           if (!resultRes.ok) {
+            // RAI_FILTERED means the photo itself was rejected by the AI provider's
+            // safety filter — retrying the same photo will fail again, so use a
+            // distinct, non-generic error message instead of the default retry copy.
+            if (resultData.code === "RAI_FILTERED") {
+              setError(
+                  resultData.error ||
+                  "Your photo could not be used to generate a video because it was flagged by the AI provider's content safety filter. Please try a different photo."
+              );
+              setStage("idle");
+              setProgress(null);
+              return;
+            }
             throw new Error(resultData.error || "Failed to get final video.");
           }
 
