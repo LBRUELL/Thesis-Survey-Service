@@ -375,7 +375,6 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
                         parameters: {
                             durationSeconds: 6,
                             personGeneration: "allow_adult",
-                            includeRaiReason: true
                         },
                     }),
                 }
