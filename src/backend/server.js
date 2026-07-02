@@ -477,7 +477,13 @@ app.get("/api/get-video-result", async (req, res) => {
     const videoUri = samples[0]?.video?.uri;
     console.log("[GET-VIDEO] videoUri:", videoUri);
 
-    if (!videoUri) return res.status(502).json({ error: "No video URI found after multiple attempts." });
+      if (!videoUri) {
+          console.error("[GET-VIDEO] Full response:", JSON.stringify(data.response));
+          return res.status(502).json({
+              error: "No video URI found after multiple attempts.",
+              filtered: data.response?.raiMediaFilteredReasons || null,
+          });
+      }
 
     // Try adding the API key — Google file URIs often require it
     const fetchUri = videoUri.includes("?")
