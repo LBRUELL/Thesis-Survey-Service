@@ -28,7 +28,9 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_VEO_MODEL = process.env.GEMINI_VEO_MODEL;
 console.log("GEMINI_API_KEY loaded:", GEMINI_API_KEY ? `${GEMINI_API_KEY.slice(0, 8)}...` : "MISSING");
+console.log("GEMINI_VEO_MODEL configured:", GEMINI_VEO_MODEL);
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Robust Fetch Helper ───────────────────────────────────────────────────────
@@ -291,10 +293,8 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
             return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
         }
         const deviceId = req.headers["x-device-id"];
-        // "veo-3.1-lite-generate-preview",
-        // "veo-3.1-fast-generate-preview"
         const { prompt, surveyId, model } = req.body;
-        const targetModel = model; // Default model
+        const targetModel = model || GEMINI_VEO_MODEL;
 
         let limitEnabled = true;
         if (surveyId) {
@@ -366,7 +366,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
-                    parameters: {
+                    generationConfig: {
                         durationSeconds: 6,
                         personGeneration: "allow_adult",
                     },
