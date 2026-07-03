@@ -359,12 +359,6 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
         console.log(`[PIPELINE] Step 2: Image pre-processing successful. Sending edited image to VEO...`);
 
-        const parameters = {
-            durationSeconds: 6,
-            personGeneration: "allow_adult",
-            includeRaiReason: true
-        };
-
         const veoRes = await fetchWithRetry(
             `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:predictLongRunning?key=${GEMINI_API_KEY}`,
             {
@@ -372,7 +366,8 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
-                    parameters,
+                    durationSeconds: 6,
+                    personGeneration: "allow_adult",
                 }),
             }
         );
