@@ -285,20 +285,17 @@ app.get("/api/surveys/:id/responses", async (req, res) => {
 });
 
 // ─── Gemini VEO Routes ─────────────────────────────────────────────────────────
-const VEO_MODELS = [
-    "veo-3.1-lite-generate-preview",
-    "veo-3.1-fast-generate-preview",
-    "veo-3.0-fast-generate-001",
-    "veo-3.1-generate-preview",
-];
-
 app.post("/api/generate-video", upload.single("image"), async (req, res) => {
     try {
         if (!GEMINI_API_KEY) {
             return res.status(503).json({ error: "GEMINI_API_KEY not configured" });
         }
         const deviceId = req.headers["x-device-id"];
-        const { prompt, surveyId } = req.body;
+        // "veo-3.1-lite-generate-preview",
+        // "veo-3.1-fast-generate-preview"
+        const { prompt, surveyId, model } = req.body;
+        const targetModel = model || "veo-3.1-lite-generate-preview"; // Default model
+
         let limitEnabled = true;
         if (surveyId) {
             const surveys = await getSurveys();
@@ -362,45 +359,32 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
 
         console.log(`[PIPELINE] Step 2: Image pre-processing successful. Sending edited image to VEO...`);
 
-        let operation;
-        for (const model of VEO_MODELS) {
-            console.log(`[VEO] Attempting to generate video with model: ${model}`);
-            const veoRes = await fetchWithRetry(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${GEMINI_API_KEY}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
-                        parameters: {
-                            durationSeconds: 6,
-                            personGeneration: "allow_adult",
-                        },
-                    }),
-                }
-            );
+        const parameters = {
+            durationSeconds: 6,
+            personGeneration: "allow_adult",
+            includeRaiReason: true
+        };
 
-            const veoText = await veoRes.text();
-            if (!veoRes.ok) {
-                console.error(`[VEO] API error with model ${model}:`, veoText);
-                const isQuotaError = (veoRes.status === 429) || veoText.toLowerCase().includes("quota");
-                if (isQuotaError) {
-                    console.warn(`[VEO] Quota error for model ${model}. Trying next model.`);
-                    continue;
-                } else {
-                    return res.status(502).json({ error: `Gemini VEO API error: ${veoText}` });
-                }
+        const veoRes = await fetchWithRetry(
+            `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:predictLongRunning?key=${GEMINI_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
+                    parameters,
+                }),
             }
+        );
 
-            const resJson = JSON.parse(veoText);
-            operation = resJson;
-            console.log(`[VEO] Successfully initiated generation with ${model}`);
-            break;
+        const veoText = await veoRes.text();
+        if (!veoRes.ok) {
+            console.error(`[VEO] API error with model ${targetModel}:`, veoText);
+            return res.status(502).json({ error: `Gemini VEO API error: ${veoText}` });
         }
 
-        if (!operation) {
-            return res.status(502).json({ error: "All VEO models failed due to quota or other errors." });
-        }
+        const operation = JSON.parse(veoText);
+        console.log(`[VEO] Successfully initiated generation with ${targetModel}`);
 
         if (deviceId) await recordUsage(deviceId, "videos");
         res.json({ operationName: operation.name, status: "processing" });

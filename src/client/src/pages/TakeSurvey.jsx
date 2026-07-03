@@ -251,8 +251,8 @@ export default function TakeSurvey() {
 
                   {q.type === "multiple_choice" && (
                     <div className={styles.mcOptions}>
-                      {(q.options || []).map((opt, i) => (
-                        <label key={i} className={styles.mcLabel}>
+                      {(q.options || []).map((opt) => (
+                        <label key={opt} className={styles.mcLabel}>
                           <input
                             type="radio"
                             name={q.id}
@@ -279,6 +279,7 @@ export default function TakeSurvey() {
                       <ImageVideoQuestion
                         surveyId={id}
                         videoPrompt={resolvedPrompt}
+                        model={q.model}
                         value={answers[q.id] || null}
                         onChange={(val) => {
                           setAnswer(q.id, val);

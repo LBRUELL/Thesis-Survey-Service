@@ -9,7 +9,7 @@ const MAX_POLLS = 60; // 3 minutes max
 const MOCK_VIDEO_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4";
 
 
-export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onChange, onVideoComplete }) {
+export default function ImageVideoQuestion({ surveyId, videoPrompt, model, value, onChange, onVideoComplete }) {
   const [stage, setStage] = useState(
       value?.videoUrl ? "done" : value?.imagePath ? "uploaded" : "idle"
   );
@@ -120,6 +120,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
     formData.append("image", file);
     formData.append("prompt", videoPrompt || "Animate this image into a short cinematic scene.");
     if (surveyId) formData.append("surveyId", surveyId);
+    if (model) formData.append("model", model);
 
     const MAX_RETRIES = 4;
     const RETRY_DELAYS = [4000, 8000, 16000, 30000];
@@ -174,7 +175,7 @@ export default function ImageVideoQuestion({ surveyId, videoPrompt, value, onCha
       setStage("idle");
       setProgress(null);
     }
-  }, [videoPrompt, onChange]);
+  }, [videoPrompt, model, onChange]);
 
   const pollVideo = useCallback((operationName, currentPreview, isTest = false) => {
     clearTimeout(pollTimerRef.current);
