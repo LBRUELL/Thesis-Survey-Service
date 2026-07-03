@@ -294,7 +294,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
         // "veo-3.1-lite-generate-preview",
         // "veo-3.1-fast-generate-preview"
         const { prompt, surveyId, model } = req.body;
-        const targetModel = model || "veo-3.1-lite-generate-preview"; // Default model
+        const targetModel = model; // Default model
 
         let limitEnabled = true;
         if (surveyId) {
