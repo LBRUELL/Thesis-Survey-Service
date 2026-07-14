@@ -28,9 +28,11 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_VEO_MODEL = process.env.GEMINI_VEO_MODEL;
+const GEMINI_VEO_MODEL = process.env.GEMINI_VEO_MODEL || "veo-3.1-lite-generate-preview";
+const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 console.log("GEMINI_API_KEY loaded:", GEMINI_API_KEY ? `${GEMINI_API_KEY.slice(0, 8)}...` : "MISSING");
 console.log("GEMINI_VEO_MODEL configured:", GEMINI_VEO_MODEL);
+console.log("GEMINI_IMAGE_MODEL configured:", GEMINI_IMAGE_MODEL);
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // ─── Robust Fetch Helper ───────────────────────────────────────────────────────
@@ -322,7 +324,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
         console.log(`[PIPELINE] Step 1: Pre-processing uploaded image via Gemini Image Generation...`);
 
         const imageGenRes = await fetchWithRetry(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -366,7 +368,7 @@ app.post("/api/generate-video", upload.single("image"), async (req, res) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     instances: [{ prompt, image: { bytesBase64Encoded: processedBase64Image, mimeType: processedMimeType } }],
-                    parameters: {
+                    generationConfig: {
                         durationSeconds: 6,
                         personGeneration: "allow_adult",
                     },
@@ -561,7 +563,7 @@ app.post("/api/generate-image", upload.single("image"), async (req, res) => {
         const mimeTypeInput = 'image/jpeg';
 
         const genRes = await fetchWithRetry(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
