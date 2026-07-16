@@ -619,6 +619,10 @@ if (fsSync.existsSync(CLIENT_BUILD)) {
 initStorage().then(() => {
     app.listen(PORT, () => {
         console.log(`\n🚀 Survey API running on http://localhost:${PORT}`);
-        console.log(`   VEO video generation: ${GEMINI_API_KEY ? "✅ enabled" : "❌ disabled (set GEMINI_API_KEY)"}\n`);
+        if (GEMINI_API_KEY) {
+            console.log(`   VEO video generation: ✅ enabled`);
+        } else {
+            console.log(`   VEO video generation: ❌ disabled (set GEMINI_API_KEY)`);
+        }
     });
 });
